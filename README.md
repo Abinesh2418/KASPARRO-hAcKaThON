@@ -108,4 +108,4 @@ kasparo/
 | Role | Person |
 |---|---|
 | Backend / Full-stack | Abinesh B |
-| Frontend / AI | Claude (AI) |
+| Frontend / UI | Ambika S |
