@@ -1,9 +1,22 @@
 "use client";
 
-import { useReducer, useRef, useCallback } from "react";
-import type { ChatState, ChatAction, Message, Preferences } from "@/types";
-import { streamChat } from "@/services/api";
+import { useReducer, useRef, useCallback, useEffect, useState } from "react";
+import type { ChatState, ChatAction, Message, Preferences, SavedChat } from "@/types";
+import { streamChat, addToCart, visualSearch } from "@/services/api";
 import { generateId } from "@/lib/utils";
+
+function getLoggedInUsername(): string {
+  if (typeof window === "undefined") return "guest";
+  try {
+    const raw = localStorage.getItem("curio_user");
+    return raw ? JSON.parse(raw).username : "guest";
+  } catch {
+    return "guest";
+  }
+}
+
+const STORAGE_KEY = "curio-chat-state";
+const HISTORY_KEY = "curio-chat-history";
 
 const initialPreferences: Preferences = {
   style: [],
@@ -22,6 +35,34 @@ const initialState: ChatState = {
   error: null,
 };
 
+function loadFromStorage(): ChatState {
+  if (typeof window === "undefined") return initialState;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return initialState;
+    const saved = JSON.parse(raw);
+    return {
+      ...initialState,
+      messages: (saved.messages ?? []).map((m: Message) => ({ ...m, isStreaming: false })),
+      sessionId: saved.sessionId ?? null,
+      preferences: saved.preferences ?? initialPreferences,
+    };
+  } catch {
+    return initialState;
+  }
+}
+
+function loadHistory(): SavedChat[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
 function reducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case "ADD_USER_MESSAGE":
@@ -31,7 +72,7 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
         error: null,
         messages: [
           ...state.messages,
-          { id: action.payload.id, role: "user", content: action.payload.content },
+          { id: action.payload.id, role: "user", content: action.payload.content, imageUrl: action.payload.imageUrl },
         ],
       };
 
@@ -90,14 +131,37 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
     case "CLEAR_ERROR":
       return { ...state, error: null };
 
+    case "CLEAR_CHAT":
+      return { ...initialState };
+
+    case "LOAD_CHAT":
+      return {
+        ...initialState,
+        messages: action.payload.messages.map((m) => ({ ...m, isStreaming: false })),
+        sessionId: action.payload.sessionId,
+        preferences: action.payload.preferences,
+      };
+
     default:
       return state;
   }
 }
 
 export function useChat() {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(reducer, undefined, loadFromStorage);
+  const [chatHistory, setChatHistory] = useState<SavedChat[]>(loadHistory);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        messages: state.messages,
+        sessionId: state.sessionId,
+        preferences: state.preferences,
+      })
+    );
+  }, [state.messages, state.sessionId, state.preferences]);
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -108,21 +172,103 @@ export function useChat() {
       .filter((m) => !m.isError)
       .map((m) => ({ role: m.role, content: m.content }));
 
+  const saveCurrentToHistory = useCallback(
+    (currentState: ChatState, existingHistory: SavedChat[], excludeId?: string): SavedChat[] => {
+      if (currentState.messages.length === 0) return existingHistory;
+      const firstUserMsg = currentState.messages.find((m) => m.role === "user");
+      if (!firstUserMsg) return existingHistory;
+      const chatId = currentState.sessionId ?? generateId();
+      const title = firstUserMsg.content.slice(0, 60) + (firstUserMsg.content.length > 60 ? "…" : "");
+      const saved: SavedChat = {
+        id: chatId,
+        title,
+        messages: currentState.messages,
+        sessionId: currentState.sessionId,
+        preferences: currentState.preferences,
+        savedAt: Date.now(),
+      };
+      return [saved, ...existingHistory.filter((c) => c.id !== chatId && c.id !== excludeId)].slice(0, 30);
+    },
+    []
+  );
+
+  const newChat = useCallback(() => {
+    const updatedHistory = saveCurrentToHistory(state, chatHistory);
+    setChatHistory(updatedHistory);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(updatedHistory));
+    dispatch({ type: "CLEAR_CHAT" });
+    localStorage.removeItem(STORAGE_KEY);
+  }, [state, chatHistory, saveCurrentToHistory]);
+
+  const loadChat = useCallback(
+    (chat: SavedChat) => {
+      const updatedHistory = saveCurrentToHistory(state, chatHistory, chat.id);
+      setChatHistory(updatedHistory);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(updatedHistory));
+      dispatch({
+        type: "LOAD_CHAT",
+        payload: { messages: chat.messages, sessionId: chat.sessionId, preferences: chat.preferences },
+      });
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ messages: chat.messages, sessionId: chat.sessionId, preferences: chat.preferences })
+      );
+    },
+    [state, chatHistory, saveCurrentToHistory]
+  );
+
+  const clearChat = useCallback(() => {
+    dispatch({ type: "CLEAR_CHAT" });
+    localStorage.removeItem(STORAGE_KEY);
+  }, []);
+
+  const deleteChat = useCallback((id: string) => {
+    const updated = chatHistory.filter((c) => c.id !== id);
+    setChatHistory(updated);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+  }, [chatHistory]);
+
+  const clearHistory = useCallback(() => {
+    setChatHistory([]);
+    localStorage.removeItem(HISTORY_KEY);
+  }, []);
+
   const sendMessage = useCallback(
-    async (prompt: string) => {
+    async (prompt: string, file?: File) => {
       if (!prompt.trim() || state.isStreaming) return;
+
+      let enhancedPrompt = prompt;
+      let imageUrl: string | undefined;
+
+      if (file) {
+        imageUrl = URL.createObjectURL(file);
+        try {
+          const result = await visualSearch(file);
+          const { attributes } = result;
+          const attrParts = [
+            attributes.description,
+            attributes.style?.length ? `Style: ${attributes.style.join(", ")}` : null,
+            attributes.colors?.length ? `Colors: ${attributes.colors.join(", ")}` : null,
+            attributes.category ? `Category: ${attributes.category}` : null,
+            attributes.occasion?.length ? `Occasion: ${attributes.occasion.join(", ")}` : null,
+          ].filter(Boolean).join(". ");
+          enhancedPrompt = `[Image context: ${attrParts}]\n\n${prompt}`;
+        } catch {
+          // visual search failed, use original prompt
+        }
+      }
 
       const userMsgId = generateId();
       const assistantMsgId = generateId();
 
-      dispatch({ type: "ADD_USER_MESSAGE", payload: { id: userMsgId, content: prompt } });
+      dispatch({ type: "ADD_USER_MESSAGE", payload: { id: userMsgId, content: prompt, imageUrl } });
       dispatch({ type: "START_ASSISTANT_MESSAGE", payload: { id: assistantMsgId } });
       setTimeout(scrollToBottom, 50);
 
       try {
         const history = getHistoryMessages(state.messages);
 
-        for await (const event of streamChat(prompt, state.sessionId, history)) {
+        for await (const event of streamChat(enhancedPrompt, state.sessionId, history)) {
           switch (event.type) {
             case "session_id":
               dispatch({ type: "SET_SESSION_ID", payload: event.session_id! });
@@ -140,6 +286,20 @@ export function useChat() {
                   preferences: event.preferences ?? initialPreferences,
                 },
               });
+              const productsToAdd = event.auto_cart_products ?? (event.auto_cart_product ? [event.auto_cart_product] : []);
+              if (productsToAdd.length > 0) {
+                const username = getLoggedInUsername();
+                productsToAdd.forEach((p) => {
+                  addToCart({
+                    username,
+                    product_id: p.id,
+                    title: p.title,
+                    price: p.price,
+                    image: p.images?.[0] ?? "",
+                    size: null,
+                  }).catch(console.error);
+                });
+              }
               break;
             case "done":
               dispatch({ type: "FINISH_STREAMING" });
@@ -159,5 +319,5 @@ export function useChat() {
     [state.isStreaming, state.sessionId, state.messages, scrollToBottom]
   );
 
-  return { state, sendMessage, bottomRef, scrollToBottom };
+  return { state, sendMessage, newChat, loadChat, clearChat, deleteChat, clearHistory, chatHistory, bottomRef, scrollToBottom };
 }

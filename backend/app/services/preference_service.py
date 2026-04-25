@@ -37,6 +37,9 @@ def get_or_create_session(session_id: str | None) -> str:
             "messages": [],
             "preferences": {**_DEFAULT_PREFERENCES},
         }
+        print(f"[PREFERENCE] New session created: {sid}")
+    else:
+        print(f"[PREFERENCE] Existing session found: {sid} | {len(_sessions[sid]['messages'])} messages")
     return sid
 
 
@@ -65,12 +68,14 @@ def extract_and_merge_preferences(session_id: str, text: str) -> Dict[str, Any]:
     )
     if budget_match:
         prefs["budget_max"] = int(budget_match.group(1))
+        print(f"[PREFERENCE] Budget detected: {prefs['budget_max']}")
 
     prefs["style"] = _merge_unique(prefs["style"], new_styles)
     prefs["colors"] = _merge_unique(prefs["colors"], new_colors)
     prefs["occasions"] = _merge_unique(prefs["occasions"], new_occasions)
     prefs["sizes"] = _merge_unique(prefs["sizes"], new_sizes)
 
+    print(f"[PREFERENCE] Extracted -> styles: {new_styles} | colors: {new_colors} | occasions: {new_occasions} | sizes: {new_sizes}")
     return prefs
 
 
@@ -80,6 +85,16 @@ def get_preferences(session_id: str) -> Dict[str, Any]:
 
 def get_messages(session_id: str) -> List[Dict[str, str]]:
     return _sessions.get(session_id, {}).get("messages", [])
+
+
+def set_last_products(session_id: str, products: list) -> None:
+    if session_id in _sessions:
+        _sessions[session_id]["last_products"] = products
+        print(f"[PREFERENCE] Stored {len(products)} last recommended products for session {session_id}")
+
+
+def get_last_products(session_id: str) -> list:
+    return _sessions.get(session_id, {}).get("last_products", [])
 
 
 def _merge_unique(existing: List[str], new: List[str]) -> List[str]:

@@ -30,6 +30,7 @@ export interface Message {
   products?: Product[];
   isStreaming?: boolean;
   isError?: boolean;
+  imageUrl?: string;
 }
 
 export interface ChatState {
@@ -41,14 +42,25 @@ export interface ChatState {
 }
 
 export type ChatAction =
-  | { type: "ADD_USER_MESSAGE"; payload: { id: string; content: string } }
+  | { type: "ADD_USER_MESSAGE"; payload: { id: string; content: string; imageUrl?: string } }
   | { type: "START_ASSISTANT_MESSAGE"; payload: { id: string } }
   | { type: "APPEND_TOKEN"; payload: { id: string; token: string } }
   | { type: "SET_SESSION_ID"; payload: string }
   | { type: "SET_METADATA"; payload: { id: string; products: Product[]; preferences: Preferences } }
   | { type: "FINISH_STREAMING" }
   | { type: "SET_ERROR"; payload: string }
-  | { type: "CLEAR_ERROR" };
+  | { type: "CLEAR_ERROR" }
+  | { type: "CLEAR_CHAT" }
+  | { type: "LOAD_CHAT"; payload: { messages: Message[]; sessionId: string | null; preferences: Preferences } };
+
+export interface SavedChat {
+  id: string;
+  title: string;
+  messages: Message[];
+  sessionId: string | null;
+  preferences: Preferences;
+  savedAt: number;
+}
 
 export interface VisualSearchResult {
   attributes: {
@@ -70,4 +82,21 @@ export interface SSEEvent {
   preferences?: Preferences;
   products?: Product[];
   message?: string;
+  auto_cart_product?: Product;
+  auto_cart_products?: Product[];
+}
+
+export interface CartItem {
+  product_id: string;
+  title: string;
+  price: number;
+  image: string;
+  size: string | null;
+  quantity: number;
+  username: string;
+}
+
+export interface AuthUser {
+  username: string;
+  name: string;
 }

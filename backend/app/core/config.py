@@ -14,13 +14,13 @@ class Settings(BaseSettings):
     AZURE_OPENAI_API_VERSION: str = "2024-12-01-preview"
     AZURE_OPENAI_MODEL: str = "gpt-4o"
 
-    # Ollama (Gemma4 vision)
-    OLLAMA_BASE_URL: str = "http://100.127.36.42:11434"
-    OLLAMA_VISION_MODEL: str = "gemma4:26b"
+    # Ollama (vision) — backend runs in Docker, so host.docker.internal reaches the local machine
+    OLLAMA_BASE_URL: str = "http://host.docker.internal:11434"
+    OLLAMA_VISION_MODEL: str = "llama3.2-vision:latest"
 
-    # Shopify — add when credentials arrive
-    SHOPIFY_STORE_DOMAIN: str = ""
-    SHOPIFY_STOREFRONT_TOKEN: str = ""
+    # Shopify
+    SHOPIFY_STORE_URL: str = ""
+    SHOPIFY_ACCESS_TOKEN: str = ""
 
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",

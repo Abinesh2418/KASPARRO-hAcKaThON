@@ -1,9 +1,14 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
-import { Sidebar } from "@/components/layout/Sidebar";
+import { Plus_Jakarta_Sans } from "next/font/google";
+import { ClientLayout } from "@/components/layout/ClientLayout";
 import "./globals.css";
 
-const geist = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
+const jakarta = Plus_Jakarta_Sans({
+  variable: "--font-jakarta",
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700", "800"],
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Shopify — AI Fashion Shopping",
@@ -13,14 +18,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${geist.variable} h-full dark`}>
+    <html lang="en" className={`${jakarta.variable} h-full dark`}>
       <body className="h-full bg-zinc-950 antialiased">
-        <div className="flex h-full">
-          <Sidebar />
-          <main className="flex-1 ml-16 lg:ml-56 h-full overflow-hidden">
-            {children}
-          </main>
-        </div>
+        <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
   );

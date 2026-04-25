@@ -16,8 +16,21 @@ export function MessageBubble({ message }: Props) {
   if (isUser) {
     return (
       <div className="flex justify-end mb-4">
-        <div className="max-w-[75%] rounded-2xl rounded-tr-sm bg-violet-600 px-4 py-3 text-sm text-white shadow-lg shadow-violet-900/20">
-          {message.content}
+        <div className="max-w-[75%] space-y-1.5">
+          {message.imageUrl && (
+            <div className="flex justify-end">
+              <img
+                src={message.imageUrl}
+                alt="Uploaded"
+                className="max-h-40 rounded-xl object-cover border border-violet-500/30 shadow-md"
+              />
+            </div>
+          )}
+          {message.content && (
+            <div className="rounded-2xl rounded-tr-sm bg-violet-600 px-4 py-3 text-sm text-white shadow-lg shadow-violet-900/20">
+              {message.content}
+            </div>
+          )}
         </div>
       </div>
     );

@@ -1,19 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Home, ShoppingBag, MessageCircle, User, Sparkles } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Home, MessageCircle, User, Sparkles, ShoppingCart, LogIn, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useEffect, useState } from "react";
 
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: Home },
-  { href: "/shop", label: "Shop", icon: ShoppingBag },
   { href: "/curio", label: "Curio AI", icon: MessageCircle },
+  { href: "/cart", label: "Cart", icon: ShoppingCart },
   { href: "/profile", label: "Profile", icon: User },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [user, setUser] = useState<{ username: string; name: string } | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("curio_user");
+      if (raw) setUser(JSON.parse(raw));
+    } catch {}
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem("curio_user");
+    setUser(null);
+    router.push("/login");
+  };
 
   return (
     <aside className="fixed left-0 top-0 h-full w-16 lg:w-56 flex flex-col bg-zinc-900/95 border-r border-zinc-800/60 z-40 backdrop-blur-sm">
@@ -59,7 +75,7 @@ export function Sidebar() {
       </nav>
 
       {/* Bottom */}
-      <div className="p-3 border-t border-zinc-800/60">
+      <div className="p-3 border-t border-zinc-800/60 flex flex-col gap-2">
         <div className="hidden lg:flex items-center gap-2 px-2 py-2 rounded-lg bg-violet-950/30 border border-violet-800/20">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
           <p className="text-[10px] text-zinc-500">AI Online</p>
@@ -67,6 +83,23 @@ export function Sidebar() {
         <div className="lg:hidden flex justify-center">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
         </div>
+        {user ? (
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 px-2 py-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-950/20 transition-colors w-full"
+          >
+            <LogOut className="h-4 w-4 flex-shrink-0" />
+            <span className="hidden lg:block text-xs truncate">{user.name}</span>
+          </button>
+        ) : (
+          <Link
+            href="/login"
+            className="flex items-center gap-2 px-2 py-2 rounded-lg text-zinc-500 hover:text-violet-400 hover:bg-violet-950/20 transition-colors"
+          >
+            <LogIn className="h-4 w-4 flex-shrink-0" />
+            <span className="hidden lg:block text-xs">Sign In</span>
+          </Link>
+        )}
       </div>
     </aside>
   );

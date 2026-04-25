@@ -1,4 +1,4 @@
-import type { SSEEvent, VisualSearchResult, Product } from "@/types";
+import type { SSEEvent, VisualSearchResult, CartItem, AuthUser } from "@/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -65,12 +65,39 @@ export async function fetchPreferences(sessionId: string) {
   return res.json();
 }
 
-export async function fetchProducts(category?: string): Promise<Product[]> {
-  const url = new URL(`${API_BASE}/api/v1/products`);
-  if (category) url.searchParams.set("category", category);
-  url.searchParams.set("limit", "20");
-  const res = await fetch(url.toString(), { cache: "no-store" });
+export async function login(username: string, password: string): Promise<AuthUser> {
+  const res = await fetch(`${API_BASE}/api/v1/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) throw new Error("Invalid username or password");
+  return res.json();
+}
+
+export async function fetchCart(username: string): Promise<CartItem[]> {
+  const res = await fetch(`${API_BASE}/api/v1/cart?username=${username}`, { cache: "no-store" });
   if (!res.ok) return [];
   const data = await res.json();
-  return data.products ?? [];
+  return data.items ?? [];
+}
+
+export async function addToCart(item: Omit<CartItem, "quantity">): Promise<CartItem[]> {
+  const res = await fetch(`${API_BASE}/api/v1/cart`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(item),
+  });
+  if (!res.ok) throw new Error("Failed to add to cart");
+  const data = await res.json();
+  return data.items ?? [];
+}
+
+export async function removeFromCart(productId: string, username: string): Promise<CartItem[]> {
+  const res = await fetch(`${API_BASE}/api/v1/cart/${productId}?username=${username}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.items ?? [];
 }

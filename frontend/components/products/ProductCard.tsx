@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Star, ShoppingBag } from "lucide-react";
 import { cn, formatPrice } from "@/lib/utils";
 import type { Product } from "@/types";
+import { addToCart } from "@/services/api";
 
 interface Props {
   product: Product;
@@ -15,7 +16,21 @@ export function ProductCard({ product, compact = false }: Props) {
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [added, setAdded] = useState(false);
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
+    try {
+      const raw = typeof window !== "undefined" ? localStorage.getItem("curio_user") : null;
+      const username = raw ? JSON.parse(raw).username : "guest";
+      await addToCart({
+        username,
+        product_id: product.id,
+        title: product.title,
+        price: product.price,
+        image: product.images[0] ?? "",
+        size: selectedSize,
+      });
+    } catch {
+      // silently fail — still show feedback
+    }
     setAdded(true);
     setTimeout(() => setAdded(false), 1500);
   };

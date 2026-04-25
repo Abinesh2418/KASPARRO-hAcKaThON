@@ -27,24 +27,35 @@ _MOCK_ATTRIBUTES = {
 
 
 async def analyze_image(image_bytes: bytes) -> dict:
+    print(f"[OLLAMA] Analyzing image | size: {len(image_bytes)/1024:.1f} KB | model: {settings.OLLAMA_VISION_MODEL} | url: {settings.OLLAMA_BASE_URL}")
     b64 = base64.b64encode(image_bytes).decode("utf-8")
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=120) as client:
+            print(f"[OLLAMA] Sending image to Ollama vision model...")
             response = await client.post(
-                f"{settings.OLLAMA_BASE_URL}/api/generate",
+                f"{settings.OLLAMA_BASE_URL}/api/chat",
                 json={
                     "model": settings.OLLAMA_VISION_MODEL,
-                    "prompt": VISION_PROMPT,
-                    "images": [b64],
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": VISION_PROMPT,
+                            "images": [b64],
+                        }
+                    ],
                     "stream": False,
                 },
             )
             response.raise_for_status()
-            raw = response.json().get("response", "")
+            raw = response.json().get("message", {}).get("content", "")
+            print(f"[OLLAMA] Raw response received ({len(raw)} chars)")
             start, end = raw.find("{"), raw.rfind("}") + 1
             if start >= 0 and end > start:
-                return json.loads(raw[start:end])
+                result = json.loads(raw[start:end])
+                print(f"[OLLAMA] Attributes extracted -> style: {result.get('style')} | colors: {result.get('colors')} | category: {result.get('category')}")
+                return result
+            print(f"[OLLAMA] No valid JSON in response -> using mock attributes")
             return _MOCK_ATTRIBUTES
-    except Exception:
-        # Ollama offline or model not loaded — return mock so demo keeps working
+    except Exception as e:
+        print(f"[OLLAMA] FAILED ({e}) -> using mock attributes as fallback")
         return _MOCK_ATTRIBUTES

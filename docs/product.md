@@ -71,5 +71,11 @@ On desktop, the Style Profile panel is fixed in a sidebar. On mobile, it collaps
 ## Hackathon Track
 
 **Kasparro Agentic Commerce Hackathon — Track 1**
-Team: Duo Dominators
-Deadline: April 30, 2026
+
+---
+
+**By Team:** Duo Dominators
+
+**Team Members:**
+- Abinesh B
+- Ambika S

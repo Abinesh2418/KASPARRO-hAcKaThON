@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1 import chat, products, preferences, visual_search, health
+from app.api.v1 import chat, products, preferences, visual_search, health, auth, cart
 
 router = APIRouter()
 
@@ -12,5 +12,7 @@ _v1.include_router(chat.router, tags=["chat"])
 _v1.include_router(products.router, tags=["products"])
 _v1.include_router(preferences.router, tags=["preferences"])
 _v1.include_router(visual_search.router, tags=["visual-search"])
+_v1.include_router(auth.router, tags=["auth"])
+_v1.include_router(cart.router, tags=["cart"])
 
 router.include_router(_v1)

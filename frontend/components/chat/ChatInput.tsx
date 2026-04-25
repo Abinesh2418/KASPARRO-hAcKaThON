@@ -5,34 +5,35 @@ import { Send, ImagePlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Props {
-  onSend: (prompt: string) => void;
-  onImageUpload: (file: File) => void;
+  onSend: (prompt: string, file?: File) => void;
   isStreaming: boolean;
 }
 
-export function ChatInput({ onSend, onImageUpload, isStreaming }: Props) {
+export function ChatInput({ onSend, isStreaming }: Props) {
   const [value, setValue] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleSend = useCallback(() => {
+    if (isStreaming) return;
+    const trimmed = value.trim();
     if (pendingFile) {
-      onImageUpload(pendingFile);
+      onSend(trimmed || "Find similar items to this image", pendingFile);
       setImagePreview(null);
       setPendingFile(null);
       setValue("");
+      if (fileRef.current) fileRef.current.value = "";
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
       return;
     }
-    const trimmed = value.trim();
-    if (!trimmed || isStreaming) return;
+    if (!trimmed) return;
     onSend(trimmed);
     setValue("");
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-    }
-  }, [value, isStreaming, onSend, onImageUpload, pendingFile]);
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
+  }, [value, isStreaming, onSend, pendingFile]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -59,7 +60,7 @@ export function ChatInput({ onSend, onImageUpload, isStreaming }: Props) {
     setPendingFile(file);
     const url = URL.createObjectURL(file);
     setImagePreview(url);
-    setValue("Search by this image");
+    setValue("");
   };
 
   const clearImage = () => {
@@ -72,6 +73,28 @@ export function ChatInput({ onSend, onImageUpload, isStreaming }: Props) {
   const canSend = (value.trim().length > 0 || pendingFile !== null) && !isStreaming;
 
   return (
+    <>
+    {/* Lightbox */}
+    {lightboxOpen && imagePreview && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+        onClick={() => setLightboxOpen(false)}
+      >
+        <div className="relative max-w-3xl max-h-[85vh] mx-4" onClick={(e) => e.stopPropagation()}>
+          <img
+            src={imagePreview}
+            alt="Full preview"
+            className="rounded-2xl object-contain max-h-[85vh] w-auto shadow-2xl"
+          />
+          <button
+            onClick={() => setLightboxOpen(false)}
+            className="absolute -top-3 -right-3 h-8 w-8 rounded-full bg-zinc-700 border border-zinc-600 flex items-center justify-center text-zinc-300 hover:bg-red-500 hover:text-white transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    )}
     <div className="px-4 pb-4 pt-2">
       <div className="relative flex items-end gap-2 rounded-2xl border border-zinc-700/60 bg-zinc-800/60 px-3 py-2 shadow-xl shadow-black/20 backdrop-blur-sm focus-within:border-violet-500/50 transition-colors">
         {/* Image preview thumbnail */}
@@ -80,7 +103,8 @@ export function ChatInput({ onSend, onImageUpload, isStreaming }: Props) {
             <img
               src={imagePreview}
               alt="Upload preview"
-              className="h-12 w-12 rounded-lg object-cover border border-zinc-600"
+              onClick={() => setLightboxOpen(true)}
+              className="h-12 w-12 rounded-lg object-cover border border-zinc-600 cursor-zoom-in hover:opacity-90 transition-opacity"
             />
             <button
               onClick={clearImage}
@@ -141,5 +165,6 @@ export function ChatInput({ onSend, onImageUpload, isStreaming }: Props) {
         Shift+Enter for new line · Upload a photo to search by style
       </p>
     </div>
+    </>
   );
 }
