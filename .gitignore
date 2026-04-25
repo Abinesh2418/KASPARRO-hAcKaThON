@@ -1,19 +1,10 @@
 # ── Python ────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
-.Python
-venv/
-env/
-.venv/
-*.egg-info/
-dist/
-build/
 .pytest_cache/
 .mypy_cache/
 
-# Backend secrets — keep .env.example, ignore .env
+# Backend secrets
 backend/.env
 backend/__pycache__/
 
@@ -21,27 +12,17 @@ backend/__pycache__/
 frontend/node_modules/
 frontend/.next/
 frontend/out/
-frontend/.env.local
-frontend/.env.development.local
-frontend/.env.test.local
-frontend/.env.production.local
+frontend/build/
+frontend/coverage/
+frontend/.env*
 frontend/npm-debug.log*
-frontend/yarn-debug.log*
-frontend/yarn-error.log*
-frontend/.pnpm-debug.log*
-frontend/tsconfig.tsbuildinfo
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
 
 # ── IDE & OS ──────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *.swo
-.DS_Store
 Thumbs.db
 *.log
-
-# ── Docker ────────────────────────────────────────────────────
-docker-compose.override.yml
-
-# ── Misc ──────────────────────────────────────────────────────
-test.py
