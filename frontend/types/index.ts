@@ -64,11 +64,12 @@ export interface SavedChat {
 
 export interface VisualSearchResult {
   attributes: {
+    keywords?: string[];
     style: string[];
     colors: string[];
-    silhouette: string;
+    silhouette?: string;
     category: string;
-    material_guess: string;
+    material_guess?: string;
     occasion: string[];
     description: string;
   };

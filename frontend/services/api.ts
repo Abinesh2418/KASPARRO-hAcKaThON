@@ -5,12 +5,13 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 export async function* streamChat(
   prompt: string,
   sessionId: string | null,
-  messages: Array<{ role: string; content: string }>
+  messages: Array<{ role: string; content: string }>,
+  preSearchedProducts?: unknown[]
 ): AsyncGenerator<SSEEvent> {
   const res = await fetch(`${API_BASE}/api/v1/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, session_id: sessionId, messages }),
+    body: JSON.stringify({ prompt, session_id: sessionId, messages, pre_searched_products: preSearchedProducts ?? null }),
     signal: AbortSignal.timeout(120_000),
   });
 

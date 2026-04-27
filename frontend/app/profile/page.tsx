@@ -15,6 +15,15 @@ const EMPTY_PREFS: Preferences = {
   occasions: [],
 };
 
+const DEMO_PREFS: Preferences = {
+  style: ["minimal", "classic", "formal"],
+  colors: ["black", "white", "silver"],
+  sizes: ["M"],
+  budget_max: 5000,
+  budget_min: null,
+  occasions: ["office", "casual", "formal"],
+};
+
 function EmptyBadge({ label }: { label: string }) {
   return (
     <span className="px-3 py-1 rounded-full bg-zinc-800/50 border border-zinc-700/40 text-zinc-600 text-xs italic">
@@ -33,12 +42,29 @@ export default function ProfilePage() {
     try {
       const rawUser = localStorage.getItem("curio_user");
       if (!rawUser) { router.push("/login"); return; }
-      setUser(JSON.parse(rawUser));
+      const parsedUser = JSON.parse(rawUser);
+      setUser(parsedUser);
 
       const rawChat = localStorage.getItem("curio-chat-state");
+      let loadedPrefs: Preferences | null = null;
       if (rawChat) {
         const chatState = JSON.parse(rawChat);
-        if (chatState.preferences) setPrefs(chatState.preferences);
+        if (chatState.preferences) loadedPrefs = chatState.preferences;
+      }
+
+      const hasPrefs =
+        loadedPrefs &&
+        (loadedPrefs.style.length > 0 ||
+          loadedPrefs.colors.length > 0 ||
+          loadedPrefs.occasions.length > 0 ||
+          loadedPrefs.budget_max !== null ||
+          loadedPrefs.sizes.length > 0);
+
+      // Show demo defaults for demo user when no real preferences exist yet
+      if (!hasPrefs && parsedUser?.username === "demo") {
+        setPrefs(DEMO_PREFS);
+      } else if (loadedPrefs) {
+        setPrefs(loadedPrefs);
       }
     } catch {}
     setLoaded(true);

@@ -21,7 +21,7 @@ export default function LoginPage() {
     try {
       const user = await login(username.trim(), password.trim());
       localStorage.setItem("curio_user", JSON.stringify(user));
-      router.push("/curio");
+      router.push("/");
     } catch {
       setError("Invalid username or password. Please try again.");
     } finally {

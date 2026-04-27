@@ -239,13 +239,28 @@ export function useChat() {
 
       let enhancedPrompt = prompt;
       let imageUrl: string | undefined;
+      let visualProducts: unknown[] | undefined;
 
       if (file) {
         imageUrl = URL.createObjectURL(file);
+      }
+
+      // Show user message + typing indicator IMMEDIATELY — don't wait for Ollama
+      const userMsgId = generateId();
+      const assistantMsgId = generateId();
+      dispatch({ type: "ADD_USER_MESSAGE", payload: { id: userMsgId, content: prompt, imageUrl } });
+      dispatch({ type: "START_ASSISTANT_MESSAGE", payload: { id: assistantMsgId } });
+      setTimeout(scrollToBottom, 50);
+
+      if (file) {
         try {
           const result = await visualSearch(file);
-          const { attributes } = result;
+          const { attributes, products } = result;
+          if (products && products.length > 0) {
+            visualProducts = products;
+          }
           const attrParts = [
+            attributes.keywords?.length ? `Product: ${attributes.keywords.join(", ")}` : null,
             attributes.description,
             attributes.style?.length ? `Style: ${attributes.style.join(", ")}` : null,
             attributes.colors?.length ? `Colors: ${attributes.colors.join(", ")}` : null,
@@ -258,17 +273,10 @@ export function useChat() {
         }
       }
 
-      const userMsgId = generateId();
-      const assistantMsgId = generateId();
-
-      dispatch({ type: "ADD_USER_MESSAGE", payload: { id: userMsgId, content: prompt, imageUrl } });
-      dispatch({ type: "START_ASSISTANT_MESSAGE", payload: { id: assistantMsgId } });
-      setTimeout(scrollToBottom, 50);
-
       try {
         const history = getHistoryMessages(state.messages);
 
-        for await (const event of streamChat(enhancedPrompt, state.sessionId, history)) {
+        for await (const event of streamChat(enhancedPrompt, state.sessionId, history, visualProducts)) {
           switch (event.type) {
             case "session_id":
               dispatch({ type: "SET_SESSION_ID", payload: event.session_id! });
