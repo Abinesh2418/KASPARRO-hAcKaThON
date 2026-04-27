@@ -20,6 +20,10 @@ export function ProductCard({ product, compact = false }: Props) {
     try {
       const raw = typeof window !== "undefined" ? localStorage.getItem("curio_user") : null;
       const username = raw ? JSON.parse(raw).username : "guest";
+      // Pick the variant matching the selected size, fall back to default variant
+      const matchedVariant = selectedSize
+        ? product.variants?.find((v) => v.size === selectedSize)
+        : undefined;
       await addToCart({
         username,
         product_id: product.id,
@@ -27,6 +31,7 @@ export function ProductCard({ product, compact = false }: Props) {
         price: product.price,
         image: product.images[0] ?? "",
         size: selectedSize,
+        variant_id: matchedVariant?.id ?? product.variant_id,
       });
     } catch {
       // silently fail — still show feedback

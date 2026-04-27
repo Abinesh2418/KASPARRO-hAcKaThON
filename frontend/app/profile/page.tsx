@@ -3,13 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Tag, Palette, Ruler, IndianRupee, Calendar, ArrowRight, MessageCircle, User } from "lucide-react";
+import { Tag, Palette, Ruler, Calendar, ArrowRight, MessageCircle } from "lucide-react";
 import type { Preferences } from "@/types";
 
 const EMPTY_PREFS: Preferences = {
   style: [],
   colors: [],
-  sizes: [],
+  sizes: ["L"],
   budget_max: null,
   budget_min: null,
   occasions: [],
@@ -147,37 +147,21 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Size + Budget */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-zinc-900/80 border border-zinc-800/60 rounded-2xl p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <Ruler className="h-4 w-4 text-violet-400" />
-                <span className="text-sm font-semibold text-zinc-200">Size</span>
-              </div>
-              {prefs.sizes.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {prefs.sizes.map((s) => (
-                    <span key={s} className="uppercase text-xl font-black text-zinc-100">{s}</span>
-                  ))}
-                </div>
-              ) : (
-                <span className="text-zinc-600 text-sm italic">Not set</span>
-              )}
+          {/* Size */}
+          <div className="bg-zinc-900/80 border border-zinc-800/60 rounded-2xl p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Ruler className="h-4 w-4 text-violet-400" />
+              <span className="text-sm font-semibold text-zinc-200">Size</span>
             </div>
-            <div className="bg-zinc-900/80 border border-zinc-800/60 rounded-2xl p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <IndianRupee className="h-4 w-4 text-violet-400" />
-                <span className="text-sm font-semibold text-zinc-200">Budget</span>
+            {prefs.sizes.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {prefs.sizes.map((s) => (
+                  <span key={s} className="uppercase text-xl font-black text-zinc-100">{s}</span>
+                ))}
               </div>
-              {prefs.budget_max ? (
-                <>
-                  <span className="text-2xl font-black text-zinc-100">₹{prefs.budget_max.toLocaleString()}</span>
-                  <p className="text-[10px] text-zinc-500 mt-1">max per item</p>
-                </>
-              ) : (
-                <span className="text-zinc-600 text-sm italic">Not set</span>
-              )}
-            </div>
+            ) : (
+              <span className="text-zinc-600 text-sm italic">Not set</span>
+            )}
           </div>
 
           {/* Occasions */}
@@ -196,15 +180,6 @@ export default function ProfilePage() {
               ) : (
                 <EmptyBadge label="Mention occasion in Curio e.g. 'for office'" />
               )}
-            </div>
-          </div>
-
-          {/* Logged in as */}
-          <div className="bg-zinc-900/50 border border-zinc-800/40 rounded-2xl p-4 flex items-center gap-3">
-            <User className="h-4 w-4 text-zinc-500 flex-shrink-0" />
-            <div>
-              <p className="text-xs text-zinc-500">Logged in as</p>
-              <p className="text-sm font-medium text-zinc-300">{user?.name} <span className="text-zinc-600">(@{user?.username})</span></p>
             </div>
           </div>
 

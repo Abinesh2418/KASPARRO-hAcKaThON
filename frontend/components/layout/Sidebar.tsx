@@ -2,14 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Home, MessageCircle, User, Sparkles, ShoppingCart, LogIn, LogOut } from "lucide-react";
+import { Home, MessageCircle, User, Sparkles, LogIn, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: Home },
   { href: "/curio", label: "Curio AI", icon: MessageCircle },
-  { href: "/cart", label: "Cart", icon: ShoppingCart },
   { href: "/profile", label: "Profile", icon: User },
 ];
 
@@ -78,7 +77,7 @@ export function Sidebar() {
       <div className="p-3 border-t border-zinc-800/60 flex flex-col gap-2">
         <div className="hidden lg:flex items-center gap-2 px-2 py-2 rounded-lg bg-violet-950/30 border border-violet-800/20">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
-          <p className="text-[10px] text-zinc-500">AI Online</p>
+          <p className="text-[10px] text-zinc-500">Online</p>
         </div>
         <div className="lg:hidden flex justify-center">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />

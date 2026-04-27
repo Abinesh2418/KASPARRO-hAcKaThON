@@ -33,6 +33,7 @@ export function InlineProducts({ products, title }: Props) {
           price: product.price,
           image: product.images[0] ?? "",
           size: null,
+          variant_id: product.variant_id,
         });
       }
       setAllAdded(true);

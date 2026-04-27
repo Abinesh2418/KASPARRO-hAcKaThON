@@ -6,12 +6,19 @@ export async function* streamChat(
   prompt: string,
   sessionId: string | null,
   messages: Array<{ role: string; content: string }>,
-  preSearchedProducts?: unknown[]
+  preSearchedProducts?: unknown[],
+  username?: string,
 ): AsyncGenerator<SSEEvent> {
   const res = await fetch(`${API_BASE}/api/v1/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, session_id: sessionId, messages, pre_searched_products: preSearchedProducts ?? null }),
+    body: JSON.stringify({
+      prompt,
+      session_id: sessionId,
+      messages,
+      pre_searched_products: preSearchedProducts ?? null,
+      username: username ?? null,
+    }),
     signal: AbortSignal.timeout(120_000),
   });
 

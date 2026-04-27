@@ -12,6 +12,8 @@ export interface Product {
   description: string;
   rating: number;
   reviews_count: number;
+  variant_id?: string;
+  variants?: Array<{ id: string; size: string | null; price: number }>;
 }
 
 export interface Preferences {
@@ -23,6 +25,38 @@ export interface Preferences {
   occasions: string[];
 }
 
+export interface CheckoutLineItem {
+  title: string;
+  size: string;
+  color?: string;
+  price: number;
+  quantity: number;
+  image: string;
+  subtotal_for_line: number;
+}
+
+export interface MerchantCheckout {
+  step: number;
+  merchant_name: string;
+  merchant_url: string;
+  cart_lines: Array<{ merchandiseId: string; quantity: number }>;
+  items: CheckoutLineItem[];
+  subtotal: number;
+  item_count: number;
+  checkout_url: string | null;
+}
+
+export interface CheckoutMetadata {
+  show_checkout_cta: boolean;
+  show_cart_summary: boolean;
+  is_multi_merchant: boolean;
+  merchant_count: number;
+  checkouts: MerchantCheckout[];
+  grand_total: number;
+  total_items: number;
+  currency: string;
+}
+
 export interface Message {
   id: string;
   role: "user" | "assistant";
@@ -31,6 +65,7 @@ export interface Message {
   isStreaming?: boolean;
   isError?: boolean;
   imageUrl?: string;
+  metadata?: CheckoutMetadata;
 }
 
 export interface ChatState {
@@ -46,7 +81,7 @@ export type ChatAction =
   | { type: "START_ASSISTANT_MESSAGE"; payload: { id: string } }
   | { type: "APPEND_TOKEN"; payload: { id: string; token: string } }
   | { type: "SET_SESSION_ID"; payload: string }
-  | { type: "SET_METADATA"; payload: { id: string; products: Product[]; preferences: Preferences } }
+  | { type: "SET_METADATA"; payload: { id: string; products: Product[]; preferences: Preferences; checkoutMetadata?: CheckoutMetadata } }
   | { type: "FINISH_STREAMING" }
   | { type: "SET_ERROR"; payload: string }
   | { type: "CLEAR_ERROR" }
@@ -85,6 +120,15 @@ export interface SSEEvent {
   message?: string;
   auto_cart_product?: Product;
   auto_cart_products?: Product[];
+  // Checkout fields
+  show_checkout_cta?: boolean;
+  show_cart_summary?: boolean;
+  is_multi_merchant?: boolean;
+  merchant_count?: number;
+  checkouts?: MerchantCheckout[];
+  grand_total?: number;
+  total_items?: number;
+  currency?: string;
 }
 
 export interface CartItem {
@@ -95,6 +139,9 @@ export interface CartItem {
   size: string | null;
   quantity: number;
   username: string;
+  variant_id?: string;
+  merchant_url?: string;
+  merchant_name?: string;
 }
 
 export interface AuthUser {

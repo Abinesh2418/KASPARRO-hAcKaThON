@@ -104,7 +104,7 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
         preferences: action.payload.preferences,
         messages: state.messages.map((m) =>
           m.id === action.payload.id
-            ? { ...m, products: action.payload.products, isStreaming: false }
+            ? { ...m, products: action.payload.products, isStreaming: false, metadata: action.payload.checkoutMetadata }
             : m
         ),
       };
@@ -276,7 +276,8 @@ export function useChat() {
       try {
         const history = getHistoryMessages(state.messages);
 
-        for await (const event of streamChat(enhancedPrompt, state.sessionId, history, visualProducts)) {
+        const username = getLoggedInUsername();
+        for await (const event of streamChat(enhancedPrompt, state.sessionId, history, visualProducts, username)) {
           switch (event.type) {
             case "session_id":
               dispatch({ type: "SET_SESSION_ID", payload: event.session_id! });
@@ -285,18 +286,31 @@ export function useChat() {
               dispatch({ type: "APPEND_TOKEN", payload: { id: assistantMsgId, token: event.content! } });
               scrollToBottom();
               break;
-            case "metadata":
+            case "metadata": {
+              const checkoutMetadata = event.show_cart_summary
+                ? {
+                    show_checkout_cta: event.show_checkout_cta ?? false,
+                    show_cart_summary: event.show_cart_summary ?? false,
+                    is_multi_merchant: event.is_multi_merchant ?? false,
+                    merchant_count: event.merchant_count ?? 0,
+                    checkouts: event.checkouts ?? [],
+                    grand_total: event.grand_total ?? 0,
+                    total_items: event.total_items ?? 0,
+                    currency: event.currency ?? "INR",
+                  }
+                : undefined;
               dispatch({
                 type: "SET_METADATA",
                 payload: {
                   id: assistantMsgId,
                   products: event.products ?? [],
                   preferences: event.preferences ?? initialPreferences,
+                  checkoutMetadata,
                 },
               });
               const productsToAdd = event.auto_cart_products ?? (event.auto_cart_product ? [event.auto_cart_product] : []);
+
               if (productsToAdd.length > 0) {
-                const username = getLoggedInUsername();
                 productsToAdd.forEach((p) => {
                   addToCart({
                     username,
@@ -305,10 +319,12 @@ export function useChat() {
                     price: p.price,
                     image: p.images?.[0] ?? "",
                     size: null,
+                    variant_id: p.variant_id,
                   }).catch(console.error);
                 });
               }
               break;
+            }
             case "done":
               dispatch({ type: "FINISH_STREAMING" });
               break;

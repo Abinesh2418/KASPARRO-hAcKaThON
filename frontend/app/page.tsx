@@ -28,9 +28,9 @@ const FEATURES = [
   },
   {
     icon: Layers,
-    title: "Multi-Agent Pipeline",
+    title: "7-Agent AI Pipeline",
     description:
-      "Six specialized AI agents work in sequence: Intent → Search → Fetch → Compare → Explain → Respond. Every recommendation is reasoned, not random.",
+      "Seven specialized AI agents work in sequence: Intent → Search → Fetch → Compare → Explain → Cart → Checkout. Every recommendation and every purchase is handled end-to-end in one conversation.",
     color: "from-blue-600/20 to-indigo-700/10 border-blue-500/20",
     iconColor: "text-blue-400",
     iconBg: "bg-blue-500/10",
@@ -55,9 +55,9 @@ const FEATURES = [
   },
   {
     icon: ShoppingCart,
-    title: "Smart Follow-up Questions",
+    title: "Real Shopify Checkout",
     description:
-      "Curio never guesses blindly. It asks the right questions — budget, occasion, who it's for — one at a time, until it has everything needed to find the perfect match.",
+      "Say 'add this' or 'I'm done' and Curio handles the rest — real Shopify cartCreate calls, per-merchant checkout URLs, and an inline cart summary, all inside the chat.",
     color: "from-amber-600/20 to-orange-700/10 border-amber-500/20",
     iconColor: "text-amber-400",
     iconBg: "bg-amber-500/10",
@@ -95,9 +95,9 @@ const PROS = [
     detail: "Office, college, wedding, festival — Curio styles for the moment, not just the garment.",
   },
   {
-    icon: Sparkles,
-    label: "No Filter Fatigue",
-    detail: "No dropdowns, no sliders. Just describe what you want in plain language.",
+    icon: ShoppingCart,
+    label: "One-Tap Shopify Checkout",
+    detail: "Live checkout URLs via Shopify cartCreate — one per merchant. Add to cart and pay without leaving the conversation.",
   },
   {
     icon: Brain,
@@ -151,7 +151,7 @@ export default function Home() {
       <section className="px-6 lg:px-10 pb-12">
         <div className="grid grid-cols-3 gap-4 max-w-sm">
           {[
-            { value: "6", label: "AI Agents" },
+            { value: "7", label: "AI Agents" },
             { value: "Live", label: "Shopify Catalog" },
             { value: "∞", label: "Style Combos" },
           ].map(({ value, label }) => (
