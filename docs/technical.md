@@ -11,9 +11,9 @@ Browser
   │
   └── http://localhost:8000   → FastAPI Backend
           │
-          ├── Azure OpenAI (cloud)          → gpt-4o  (6-agent pipeline + streaming)
+          ├── Azure OpenAI (cloud)          → gpt-4o  (agent pipeline + streaming)
           ├── Ollama (local/network)        → llama3.2-vision  (visual search)
-          └── Shopify GraphQL API (cloud)   → live product catalog (fallback: mock)
+          └── Shopify GraphQL API (cloud)   → Admin API (product fetch) + Storefront API (cartCreate)
 ```
 
 ---
@@ -28,7 +28,8 @@ Browser
 | Server | Uvicorn (ASGI) |
 | LLM — Agents & Chat | Azure OpenAI `gpt-4o` |
 | LLM — Vision | Ollama `llama3.2-vision:latest` (configurable) |
-| Product Data | Shopify Storefront GraphQL API (fallback: 20-item mock catalog) |
+| Product Data | Shopify Admin GraphQL API (fallback: 20-item mock catalog) |
+| Checkout | Shopify Storefront API — `cartCreate` mutation |
 | Streaming | Server-Sent Events via `StreamingResponse` |
 | Validation | Pydantic v2 |
 | Session Storage | In-memory dict (per-process) |
@@ -69,15 +70,16 @@ kasparo/
 │   │   │       ├── cart.py               # GET/POST/DELETE /api/v1/cart
 │   │   │       └── health.py             # GET  /health
 │   │   ├── services/
-│   │   │   ├── orchestrator_service.py   # 6-agent pipeline coordinator
+│   │   │   ├── orchestrator_service.py   # Agent pipeline coordinator + checkout handler
 │   │   │   ├── llm_service.py            # Azure OpenAI JSON agent + streaming wrapper
 │   │   │   ├── azure_service.py          # Fallback streaming chat (no pipeline)
 │   │   │   ├── ollama_service.py         # Vision image analysis
-│   │   │   ├── shopify_service.py        # Shopify GraphQL product fetch + search
+│   │   │   ├── shopify_service.py        # Shopify product fetch + cartCreate
+│   │   │   ├── cart_service.py           # Centralized in-memory cart store
 │   │   │   ├── product_service.py        # Mock catalog (20 items, Shopify fallback)
 │   │   │   └── preference_service.py     # In-memory session + preference extraction
 │   │   ├── schemas/
-│   │   │   ├── chat.py                   # ChatRequest, ChatMessage
+│   │   │   ├── chat.py                   # ChatRequest (prompt, session_id, username)
 │   │   │   ├── product.py                # Product schema
 │   │   │   └── preference.py             # Preferences schema
 │   │   └── core/
@@ -85,11 +87,12 @@ kasparo/
 │   │       ├── middleware.py             # CORS, exception handlers
 │   │       └── prompts/
 │   │           ├── orchestrator.py       # ORCHESTRATOR_PROMPT, FINAL_RESPONSE_PROMPT
-│   │           ├── intent_agent.py       # Intent classification + extraction
+│   │           ├── intent_agent.py       # 11-intent classifier + entity extraction
 │   │           ├── search_agent.py       # Search query generation
 │   │           ├── compare_agent.py      # Product scoring + ranking
 │   │           ├── explain_agent.py      # Styling rationale generation
-│   │           └── cart_agent.py         # Cart interaction handling
+│   │           ├── cart_agent.py         # Cart add — variant picking, merchant grouping
+│   │           └── checkout_agent.py     # Checkout — cart validation, cartCreate payload
 │   ├── db/
 │   │   └── users.json                    # User store (file-based auth)
 │   ├── requirements.txt
@@ -112,7 +115,7 @@ kasparo/
 │   │   ├── chat/
 │   │   │   ├── ChatInterface.tsx        # Main chat shell
 │   │   │   ├── MessageList.tsx
-│   │   │   ├── MessageBubble.tsx
+│   │   │   ├── MessageBubble.tsx        # Message + inline checkout card
 │   │   │   ├── ChatInput.tsx            # Text + image upload input
 │   │   │   └── TypingIndicator.tsx
 │   │   ├── products/
@@ -144,19 +147,21 @@ kasparo/
 
 ## Multi-Agent Pipeline
 
-The core of Kasparo's recommendation engine is a 6-step pipeline executed on every chat request.
+### Shopping Pipeline (product discovery)
+
+Runs on every shopping-related message. 6 steps.
 
 ```
 User Message
      │
      ▼
-1. Intent Agent          — classifies intent, extracts budget / occasion / style / recipient
+1. Intent Agent          — classifies intent (11 types), extracts budget / occasion / style / recipient
      │
      ▼
 2. Search Agent          — generates primary + variant + fallback Shopify search queries
      │
      ▼
-3. Shopify Fetch         — fetches live candidate products matching the queries
+3. Shopify Fetch         — fetches live candidate products via Admin GraphQL API
      │
      ▼
 4. Compare & Rank Agent  — scores each product 0–100, filters below 35, returns top 3
@@ -168,17 +173,43 @@ User Message
 6. Stream Response       — Azure OpenAI streams the conversational final answer token-by-token
 ```
 
+### Checkout Pipeline
+
+Runs when intent is `checkout_request`.
+
+```
+User: "I'm done / checkout / ready to pay"
+     │
+     ▼
+1. Checkout Agent        — validates cart, groups items by merchant, formats cart_lines
+     │
+     ▼
+2. Shopify cartCreate    — calls Storefront API per merchant → gets real checkout URL
+     │
+     ▼
+3. Stream Response       — streams cart summary message
+     │
+     ▼
+4. Checkout Metadata     — sends inline cart card data + checkout URLs via SSE metadata event
+```
+
 ### Intent Types
 
 | Intent | Trigger |
 |---|---|
 | `greeting` | Pure greeting or closing |
 | `general_chat` | Feedback, non-shopping questions |
-| `cart_add` | "Add to cart", "yes please", named product |
+| `cart_add` | "Add to cart", "yes please", "the first one in M" |
+| `checkout_request` | "Checkout", "I'm done", "pay now", "bas itna hi" |
+| `cart_view` | "What's in my cart?", "show me my cart" |
+| `cart_remove` | "Remove the kurta", "take out the jeans" |
 | `single_product` | One specific item request |
 | `routine_builder` | Complete outfit / head-to-toe |
 | `gift_finder` | Shopping for someone else |
 | `comparison` | Compare two or more products |
+| `style_refinement` | "Make it cheaper", "show me in navy", "more minimal" |
+
+**Priority order:** `checkout_request` > `cart_remove` > `cart_view` > `cart_add` > all others
 
 ### Product Scoring (Compare & Rank Agent)
 
@@ -210,6 +241,7 @@ Streams a shopping assistant response as Server-Sent Events.
 {
   "prompt": "I need a casual outfit for a weekend brunch",
   "session_id": "abc123",
+  "username": "abinesh",
   "messages": [
     { "role": "user", "content": "previous turn" },
     { "role": "assistant", "content": "previous reply" }
@@ -218,13 +250,38 @@ Streams a shopping assistant response as Server-Sent Events.
 }
 ```
 
-**SSE event stream:**
+**SSE event stream (shopping):**
 ```
 data: {"type": "session_id", "session_id": "uuid-here"}
 data: {"type": "token", "content": "Great"}
 data: {"type": "token", "content": " choice"}
 data: {"type": "metadata", "preferences": {...}, "products": [...]}
 data: {"type": "done"}
+```
+
+**SSE metadata event (checkout):**
+```json
+{
+  "type": "metadata",
+  "show_cart_summary": true,
+  "show_checkout_cta": true,
+  "is_multi_merchant": true,
+  "merchant_count": 2,
+  "checkouts": [
+    {
+      "step": 1,
+      "merchant_name": "Veda",
+      "merchant_url": "kasparro-curio-veda.myshopify.com",
+      "items": [...],
+      "subtotal": 1499.0,
+      "item_count": 1,
+      "checkout_url": "https://kasparro-curio-veda.myshopify.com/checkouts/cn/..."
+    }
+  ],
+  "grand_total": 2798.0,
+  "total_items": 2,
+  "currency": "INR"
+}
 ```
 
 **Error event:**
@@ -308,7 +365,10 @@ Cart read, add, and remove operations. Cart items are scoped to the logged-in us
   "image": "https://...",
   "size": "M",
   "quantity": 1,
-  "username": "..."
+  "username": "...",
+  "variant_id": "gid://shopify/ProductVariant/45111111",
+  "merchant_url": "kasparro-curio-veda.myshopify.com",
+  "merchant_name": "Veda"
 }
 ```
 
@@ -359,15 +419,60 @@ interface Preferences {
 }
 ```
 
+### MerchantCheckout
+```typescript
+interface MerchantCheckout {
+  step: number;
+  merchant_name: string;
+  merchant_url: string;
+  cart_lines: Array<{ merchandiseId: string; quantity: number }>;
+  items: CheckoutLineItem[];
+  subtotal: number;
+  item_count: number;
+  checkout_url: string | null;
+}
+```
+
 ### SSE Events
 ```typescript
 type SSEEvent =
   | { type: "session_id"; session_id: string }
   | { type: "token"; content: string }
-  | { type: "metadata"; preferences: Preferences; products: Product[]; auto_cart_products?: string[] }
+  | { type: "metadata"; preferences: Preferences; products: Product[]; auto_cart_products?: Product[];
+      // checkout fields (present when intent = checkout_request)
+      show_cart_summary?: boolean; show_checkout_cta?: boolean;
+      is_multi_merchant?: boolean; merchant_count?: number;
+      checkouts?: MerchantCheckout[]; grand_total?: number;
+      total_items?: number; currency?: string; }
   | { type: "done" }
   | { type: "error"; message: string }
 ```
+
+---
+
+## Shopify Integration
+
+### Product Fetch (Admin API)
+
+Products are fetched via the Shopify Admin GraphQL API (`/admin/api/2026-04/graphql.json`) using `X-Shopify-Access-Token`. Results are cached in-process. Falls back to the 20-item mock catalog if the API is unavailable.
+
+### Checkout (Storefront API)
+
+When a user triggers checkout, the backend calls Shopify's Storefront `cartCreate` mutation per merchant group (`/api/2024-10/graphql.json`) using `X-Shopify-Storefront-Access-Token`. Returns a real `checkoutUrl` that opens the Shopify-hosted checkout page.
+
+```graphql
+mutation cartCreate($input: CartInput!) {
+  cartCreate(input: $input) {
+    cart {
+      id
+      checkoutUrl
+      cost { totalAmount { amount currencyCode } }
+    }
+  }
+}
+```
+
+If `SHOPIFY_STOREFRONT_TOKEN` is not configured or cartCreate fails, the backend falls back to a direct store cart URL (`https://{merchant_url}/cart`).
 
 ---
 
@@ -426,9 +531,12 @@ AZURE_OPENAI_MODEL=gpt-4o
 OLLAMA_BASE_URL=http://host.docker.internal:11434
 OLLAMA_VISION_MODEL=llama3.2-vision:latest
 
-# Shopify
-SHOPIFY_STORE_URL=https://your-store.myshopify.com
-SHOPIFY_ACCESS_TOKEN=your_storefront_token
+# Shopify — Admin API (product fetch)
+SHOPIFY_STORE_URL=your-store.myshopify.com
+SHOPIFY_ACCESS_TOKEN=shpat_your_admin_token
+
+# Shopify — Storefront API (cartCreate / checkout)
+SHOPIFY_STOREFRONT_TOKEN=your_storefront_token
 
 # Server
 HOST=0.0.0.0
@@ -447,7 +555,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 ```bash
 cp backend/.env.example backend/.env
-# Add Azure OpenAI credentials and Shopify credentials
+# Add Azure OpenAI credentials and both Shopify tokens
 
 docker-compose up --build
 ```

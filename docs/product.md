@@ -31,13 +31,13 @@ Curio collapses this into a single conversation.
 
 Users describe what they're looking for in natural language — "something minimal but interesting for a job interview next week" — and Curio responds like a knowledgeable personal stylist. No filters, no dropdowns. Just a conversation.
 
-Curio asks smart follow-up questions (budget → occasion → style) one at a time, never overwhelming the user, and only asks what it actually needs to narrow the recommendation.
+Curio asks smart follow-up questions (budget → occasion → style) one at a time, never overwhelming the user, and only asks what it actually needs to narrow the recommendation. Users can also refine mid-conversation: "show me cheaper ones", "in navy instead", "more minimal please" — and Curio adjusts without losing context.
 
 ### Feature 2 — Multi-Agent AI Reasoning Pipeline
 
 Behind every recommendation is a 6-step reasoning pipeline:
 
-1. **Intent Agent** — Understands what the user actually wants: occasion, budget, style, recipient
+1. **Intent Agent** — Classifies what the user wants (11 intent types: shopping, cart, checkout, refinement, gift, comparison, and more)
 2. **Search Agent** — Generates optimized search queries from intent
 3. **Product Fetch** — Pulls live candidates from the Shopify catalog
 4. **Compare & Rank Agent** — Scores products across occasion fit, style match, budget fit, and category relevance
@@ -77,9 +77,34 @@ Curio remembers the full conversation within a session. If a user says "actually
 
 ### Feature 9 — Cart Management
 
-Users can add products to a cart directly from the conversation or inline product cards. The cart persists across sessions via the backend and is scoped to the logged-in user.
+Users can add products to a cart directly from the conversation or inline product cards. The AI understands natural add commands:
 
-### Feature 10 — Photo Upload with Preview
+- Ordinal references — "add the first one", "add the second one in size M"
+- Named items — "add the kurta and the mojaris"
+- Confirmations — "yes please", "I'll take it"
+
+If the user's size is unavailable, the agent picks the closest available size and flags it. The cart persists per user via the backend.
+
+### Feature 10 — Conversational Checkout
+
+When the user is ready to buy, they just say so — "I'm done", "checkout", "ready to pay", "bas itna hi" — and Curio handles the rest in the chat.
+
+The AI validates the cart, generates an inline cart summary card with all items grouped by merchant, and presents a one-tap checkout button per store. Checkout URLs are generated live via Shopify's cartCreate API.
+
+*Example:*
+> User: "Take me to checkout"
+> Curio: Shows cart summary card → "Two checkouts coming up — Veda first (₹1,499), then Indie (₹1,299)"
+
+### Feature 11 — Multi-Merchant Checkout
+
+Curio supports products from multiple Shopify merchants in a single conversation. When a cart has items from different stores, it:
+
+- Groups items by merchant in the checkout summary card
+- Generates a separate Shopify checkout URL for each store
+- Presents numbered checkout buttons ("Step 1 of 2 — Checkout with Veda")
+- Gently warns users when adding items from a different store than what's already in their cart
+
+### Feature 12 — Photo Upload with Preview
 
 Users upload a photo in the chat input bar. A thumbnail preview appears before submission, and a loading indicator is shown while the AI analyzes the image.
 
@@ -96,6 +121,7 @@ Users upload a photo in the chat input bar. A thumbnail preview appears before s
 | Text search only | Text + image search |
 | US-centric defaults | Native ₹ budgets, Indian occasions, Indian categories |
 | No memory between sessions | Style profile builds across the conversation |
+| Manual cart + checkout flow | Add to cart and checkout from the conversation |
 
 ---
 

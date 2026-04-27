@@ -10,10 +10,12 @@ Built for the **Kasparro Agentic Commerce Hackathon (Track 1)** · April 2026
 
 A full-stack AI shopping platform with:
 
-- **Curio AI Chat** — Conversational shopping assistant powered by a 6-agent Azure OpenAI (GPT-4o) pipeline. Ask in plain language, get curated product recommendations with stylist-quality reasoning.
+- **Curio AI Chat** — Conversational shopping assistant powered by an agent pipeline (Azure OpenAI GPT-4o). Ask in plain language, get curated product recommendations with stylist-quality reasoning.
 - **Visual Search** — Upload any outfit photo and the AI (Ollama vision) extracts style attributes and finds similar products from the live Shopify catalog.
 - **Live Style Profile** — Preferences (style, colors, budget, occasions, size) are learned automatically from the conversation and displayed in real-time.
-- **Cart Management** — Add products directly from the conversation. Cart persists per user across sessions.
+- **Cart Management** — Add products directly from the conversation using natural language ("add the first one in M", "add both").
+- **Conversational Checkout** — Say "I'm done" or "checkout" and Curio shows an inline cart summary with real Shopify checkout URLs generated via `cartCreate`.
+- **Multi-Merchant Checkout** — Items from multiple Shopify stores are grouped and presented with a separate checkout button per merchant.
 - **User Auth** — Simple login with session-scoped cart and preferences.
 - **Indian Market Context** — Native ₹ budgets, Indian occasions, Indian fashion categories, and Hinglish understanding.
 
@@ -22,11 +24,12 @@ A full-stack AI shopping platform with:
 ## How It Works
 
 1. **Chat** — Tell Curio what you're looking for in plain language
-2. **6-agent pipeline** — Intent → Search → Fetch → Compare → Explain → Respond
+2. **Agent pipeline** — Intent (11 types) → Search → Fetch → Compare → Explain → Respond
 3. **Get recommendations** — Products appear inline in the conversation, matched and ranked by occasion fit, style, and budget
 4. **Upload a photo** — Visual AI extracts the style and finds similar items
 5. **Watch your style profile build** — Preferences update in real-time as you chat
-6. **Add to cart** — One tap from the conversation or product card
+6. **Add to cart** — By name, ordinal ("the second one"), or confirmation ("yes please")
+7. **Checkout from the chat** — "I'm done" → inline cart summary → one-tap checkout per merchant
 
 ---
 
@@ -62,8 +65,9 @@ AZURE_OPENAI_API_KEY=your_key
 AZURE_OPENAI_ENDPOINT=https://your-resource.cognitiveservices.azure.com/
 AZURE_OPENAI_MODEL=gpt-4o
 OLLAMA_BASE_URL=http://host.docker.internal:11434
-SHOPIFY_STORE_URL=https://your-store.myshopify.com
-SHOPIFY_ACCESS_TOKEN=your_storefront_token
+SHOPIFY_STORE_URL=your-store.myshopify.com
+SHOPIFY_ACCESS_TOKEN=shpat_your_admin_token
+SHOPIFY_STOREFRONT_TOKEN=your_storefront_token
 ```
 
 **3. Start Ollama on your host machine**
@@ -127,7 +131,8 @@ ollama serve
 | Backend | FastAPI, Uvicorn, Pydantic v2 |
 | Chat / Agents LLM | Azure OpenAI — `gpt-4o` |
 | Vision LLM | Ollama — `llama3.2-vision:latest` |
-| Product Data | Shopify Storefront GraphQL API (fallback: mock catalog) |
+| Product Data | Shopify Admin GraphQL API (fallback: mock catalog) |
+| Checkout | Shopify Storefront API — `cartCreate` mutation |
 | Streaming | Server-Sent Events (SSE) |
 | Session State | In-memory |
 
@@ -140,9 +145,9 @@ kasparo/
 ├── backend/
 │   ├── app/
 │   │   ├── api/v1/          # chat, products, visual-search, preferences, auth, cart, health
-│   │   ├── services/        # orchestrator, llm, azure, ollama, shopify, product, preference
+│   │   ├── services/        # orchestrator, llm, azure, ollama, shopify, cart, product, preference
 │   │   ├── schemas/         # Pydantic models
-│   │   └── core/            # config, middleware, prompts (6 agent prompts)
+│   │   └── core/            # config, middleware, prompts (7 agent prompts incl. checkout)
 │   ├── db/users.json        # File-based user store
 │   ├── Dockerfile
 │   └── .env.example
@@ -175,8 +180,9 @@ kasparo/
 | `AZURE_OPENAI_MODEL` | Yes | Deployment name (e.g. `gpt-4o`) |
 | `OLLAMA_BASE_URL` | Yes | Ollama server URL |
 | `OLLAMA_VISION_MODEL` | Yes | Vision model name (e.g. `llama3.2-vision:latest`) |
-| `SHOPIFY_STORE_URL` | Yes | Shopify store URL |
-| `SHOPIFY_ACCESS_TOKEN` | Yes | Shopify Storefront API token |
+| `SHOPIFY_STORE_URL` | Yes | Shopify store URL (e.g. `your-store.myshopify.com`) |
+| `SHOPIFY_ACCESS_TOKEN` | Yes | Shopify Admin API token (product fetch) |
+| `SHOPIFY_STOREFRONT_TOKEN` | Yes | Shopify Storefront API token (cartCreate / checkout) |
 
 **`frontend/.env.local`**
 
