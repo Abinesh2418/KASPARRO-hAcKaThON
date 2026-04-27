@@ -12,3 +12,4 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = None
     messages: List[ChatMessage] = []
     pre_searched_products: Optional[List[Any]] = None
+    username: Optional[str] = None

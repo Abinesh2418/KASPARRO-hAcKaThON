@@ -20,7 +20,8 @@ class Settings(BaseSettings):
 
     # Shopify
     SHOPIFY_STORE_URL: str = ""
-    SHOPIFY_ACCESS_TOKEN: str = ""
+    SHOPIFY_ACCESS_TOKEN: str = ""        # Admin API token (product fetch)
+    SHOPIFY_STOREFRONT_TOKEN: str = ""    # Storefront API token (cartCreate)
 
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",

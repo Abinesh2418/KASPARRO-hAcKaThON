@@ -12,7 +12,8 @@ import json
 import logging
 from typing import AsyncGenerator
 
-from app.services import llm_service, shopify_service, preference_service, azure_service
+from app.services import llm_service, shopify_service, preference_service, azure_service, cart_service
+from app.core.config import settings
 from app.core.prompts import (
     INTENT_AGENT_PROMPT,
     SEARCH_AGENT_PROMPT,
@@ -112,9 +113,11 @@ async def _stream_final_response(
     ]
 
     force_note = (
-        "\nINSTRUCTION: These are the BEST AVAILABLE products in the catalog. "
-        "You MUST recommend them positively. NEVER say 'I couldn't find' when products are listed. "
-        "If not a perfect match, say: 'The closest I found is [title] — [why it still works].'\n"
+        "\nINSTRUCTION: Nothing in the catalog genuinely matches what the user asked for. "
+        "Do NOT recommend any of the products listed above — they do not fit. "
+        "Tell the user clearly we don't carry that type right now. "
+        "Suggest 1-2 alternative categories we DO have (e.g. kurtas, casual dresses, blazers, jeans) "
+        "and ask if they'd like to explore those instead.\n"
         if force_recommend else ""
     )
 
@@ -135,6 +138,102 @@ async def _stream_final_response(
 
     async for token in llm_service.stream_final_response(FINAL_RESPONSE_PROMPT, messages):
         yield token
+
+
+# ── Checkout handler ─────────────────────────────────────────────────────────
+
+async def _handle_checkout(
+    user_message: str,
+    username: str | None,
+    preferences: dict,
+    history: list[dict],
+) -> AsyncGenerator[dict, None]:
+    cart_items = cart_service.get_cart(username) if username else []
+    print(f"[CHECKOUT] Running for user={username} | {len(cart_items)} cart items")
+
+    if not cart_items:
+        msg = "Your cart is empty. What would you like to find?"
+        for char in msg:
+            yield {"type": "token", "content": char}
+        yield {"type": "metadata", "preferences": preferences, "products": []}
+        yield {"type": "done"}
+        return
+
+    # Build cart_lines from stored variant_ids (set when products were added to cart)
+    cart_lines = []
+    for item in cart_items:
+        vid = item.get("variant_id")
+        if vid:
+            cart_lines.append({"merchandiseId": vid, "quantity": item.get("quantity", 1)})
+    print(f"[CHECKOUT] cart_lines with variant IDs: {len(cart_lines)} / {len(cart_items)} items")
+
+    # Compute totals
+    grand_total = sum(i["price"] * i.get("quantity", 1) for i in cart_items)
+    total_items = sum(i.get("quantity", 1) for i in cart_items)
+    merchant_url = settings.SHOPIFY_STORE_URL
+    merchant_name = merchant_url.split(".")[0].replace("-", " ").title()
+
+    # Build item details for the checkout card
+    checkout_items = [
+        {
+            "title": i["title"],
+            "size": i.get("size"),
+            "color": None,
+            "quantity": i.get("quantity", 1),
+            "price": i["price"],
+            "image": i.get("image", ""),
+            "subtotal_for_line": i["price"] * i.get("quantity", 1),
+        }
+        for i in cart_items
+    ]
+
+    # Call Shopify cartCreate with real variant IDs
+    checkout_url = f"https://{merchant_url}/cart"
+    if cart_lines and settings.SHOPIFY_STOREFRONT_TOKEN:
+        try:
+            result = await shopify_service.shopify_cart_create(
+                merchant_url=merchant_url,
+                storefront_token=settings.SHOPIFY_STOREFRONT_TOKEN,
+                cart_lines=cart_lines,
+            )
+            checkout_url = result["checkout_url"]
+            print(f"[CHECKOUT] cartCreate OK: {checkout_url[:80]}")
+        except Exception as e:
+            logger.warning(f"[CHECKOUT] cartCreate failed: {e} — using fallback URL")
+    else:
+        print(f"[CHECKOUT] No variant_ids found — using store fallback URL")
+
+    # Stream user-facing message
+    names = ", ".join(f"**{i['title']}**" for i in cart_items[:2])
+    extra = f" +{len(cart_items) - 2} more" if len(cart_items) > 2 else ""
+    msg = f"Here's your cart — {names}{extra}. Tap below to complete your purchase!"
+    for char in msg:
+        yield {"type": "token", "content": char}
+
+    checkouts = [{
+        "merchant_name": merchant_name,
+        "merchant_url": merchant_url,
+        "items": checkout_items,
+        "item_count": total_items,
+        "subtotal": grand_total,
+        "checkout_url": checkout_url,
+        "step": 1,
+    }]
+
+    yield {
+        "type": "metadata",
+        "preferences": preferences,
+        "products": [],
+        "show_checkout_cta": True,
+        "show_cart_summary": True,
+        "is_multi_merchant": False,
+        "merchant_count": 1,
+        "checkouts": checkouts,
+        "grand_total": grand_total,
+        "total_items": total_items,
+        "currency": "INR",
+    }
+    yield {"type": "done"}
 
 
 # ── Preference merge ─────────────────────────────────────────────────────────
@@ -162,6 +261,7 @@ async def run_pipeline(
     preferences: dict,
     session_id: str,
     pre_searched_products: list[dict] | None = None,
+    username: str | None = None,
 ) -> AsyncGenerator[dict, None]:
     """
     Full multi-agent pipeline. Yields SSE-compatible dicts.
@@ -179,8 +279,30 @@ async def run_pipeline(
         if not intent:
             raise ValueError("Intent agent returned empty response")
 
-        intent_type = intent.get("intent_type", "single_product")
+        intent_type = intent.get("intent_type") or intent.get("intent", "single_product")
         print(f"[ORCHESTRATOR] Intent type: {intent_type}")
+
+        # ── Checkout ─────────────────────────────────────────────────────────
+        if intent_type == "checkout_request":
+            print(f"[ORCHESTRATOR] Checkout intent -> running checkout agent")
+            async for event in _handle_checkout(user_message, username, preferences, history):
+                yield event
+            return
+
+        # ── Cart view ─────────────────────────────────────────────────────────
+        if intent_type == "cart_view":
+            cart = cart_service.get_cart(username) if username else []
+            if not cart:
+                msg = "Your cart is empty. What would you like to find?"
+            else:
+                lines = ", ".join(f"**{i['title']}**{' ('+i['size']+')' if i.get('size') else ''}" for i in cart)
+                total = sum(i["price"] * i.get("quantity", 1) for i in cart)
+                msg = f"You have {len(cart)} item(s) in your cart: {lines}. Total: ₹{total:,.0f}."
+            for char in msg:
+                yield {"type": "token", "content": char}
+            yield {"type": "metadata", "preferences": preferences, "products": []}
+            yield {"type": "done"}
+            return
 
         # ── Non-shopping: greeting or general chat ───────────────────────────
         if intent_type in ("greeting", "general_chat"):
@@ -315,8 +437,10 @@ async def run_pipeline(
 
         # ── Step 7: Metadata ─────────────────────────────────────────────────
         updated_prefs = _merge_intent_into_preferences(intent, preferences)
-        products_to_return = ranked_products[:6] if ranked_products else raw_products[:6]
-        print(f"[ORCHESTRATOR] Pipeline complete | Returning {len(products_to_return)} products | Updated prefs: {updated_prefs}")
+        # Only show product cards when products genuinely scored above threshold.
+        # force_recommend=True means nothing matched — AI says "not available", so no cards.
+        products_to_return = ranked_products[:6] if not force_recommend else []
+        print(f"[ORCHESTRATOR] Pipeline complete | Returning {len(products_to_return)} products (force_recommend={force_recommend}) | Updated prefs: {updated_prefs}")
 
         yield {
             "type": "metadata",

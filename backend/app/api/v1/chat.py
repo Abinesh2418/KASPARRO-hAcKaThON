@@ -40,7 +40,7 @@ async def chat(request: ChatRequest):
         had_error = False
         token_count = 0
 
-        async for event in orchestrator_service.run_pipeline(messages, preferences, session_id, request.pre_searched_products):
+        async for event in orchestrator_service.run_pipeline(messages, preferences, session_id, request.pre_searched_products, request.username):
             yield f"data: {json.dumps(event)}\n\n"
             if event["type"] == "token":
                 full_response += event["content"]
