@@ -31,17 +31,29 @@ async def visual_search(file: UploadFile = File(...)):
     print(f"[VISUAL SEARCH] Attributes: {attributes}")
 
     search_queries: list[str] = []
-    if attributes.get("description"):
-        search_queries.append(attributes["description"])
-    search_queries.extend(attributes.get("style", []))
-    search_queries.extend(attributes.get("colors", []))
+    # Keywords first — add both full phrase AND each individual word for broader matching
+    for kw in attributes.get("keywords", []):
+        search_queries.append(kw)
+        search_queries.extend(w for w in kw.lower().split() if len(w) > 2)
+    # Category is the single most reliable signal
     if attributes.get("category"):
         search_queries.append(attributes["category"])
+    # Description words
+    if attributes.get("description"):
+        words = [w.strip(".,;:()") for w in attributes["description"].lower().split() if len(w) > 3]
+        search_queries.extend(words)
+    search_queries.extend(attributes.get("colors", []))
+    search_queries.extend(attributes.get("style", []))
     search_queries.extend(attributes.get("occasion", []))
     deduped = list(dict.fromkeys(q for q in search_queries if q))
 
     print(f"[VISUAL SEARCH] Searching Shopify with queries: {deduped}")
     products = shopify_service.search_products(queries=deduped, limit=6)
     print(f"[VISUAL SEARCH] Matched {len(products)} products | titles: {[p.title for p in products]}")
+
+    # Fallback: if nothing matched, return all products so the chat pipeline can rank by image context
+    if not products:
+        print(f"[VISUAL SEARCH] No matches — falling back to full catalog for pipeline ranking")
+        products = shopify_service.get_all_products(limit=10)
     print(f"{'='*60}\n")
     return VisualSearchResponse(attributes=attributes, products=products)

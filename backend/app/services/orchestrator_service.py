@@ -97,6 +97,7 @@ async def _stream_final_response(
     compare_result: dict,
     explain_result: dict,
     history: list[dict],
+    force_recommend: bool = False,
 ) -> AsyncGenerator[str, None]:
     explanations = {
         e["product_id"]: e["why_recommended"]
@@ -104,13 +105,27 @@ async def _stream_final_response(
     }
     ranked = compare_result.get("ranked_products", [])
 
+    # Strip scores — LLM seeing low scores causes it to say "couldn't find"
+    top_products_clean = [
+        {k: v for k, v in p.items() if k != "score"}
+        for p in ranked[:3]
+    ]
+
+    force_note = (
+        "\nINSTRUCTION: These are the BEST AVAILABLE products in the catalog. "
+        "You MUST recommend them positively. NEVER say 'I couldn't find' when products are listed. "
+        "If not a perfect match, say: 'The closest I found is [title] — [why it still works].'\n"
+        if force_recommend else ""
+    )
+
     context = (
         f"USER INTENT: {json.dumps(intent)}\n\n"
-        f"TOP PRODUCTS: {json.dumps(ranked[:3])}\n\n"
+        f"TOP PRODUCTS: {json.dumps(top_products_clean)}\n\n"
         f"EXPLANATIONS: {json.dumps(explanations)}\n\n"
         f"TIEBREAKER NEEDED: {compare_result.get('needs_tiebreaker', False)}\n"
         f"TIEBREAKER QUESTION: {compare_result.get('tiebreaker_question')}\n"
         f"RELAXED CONSTRAINT: {compare_result.get('relaxed_constraint')}"
+        f"{force_note}"
     )
 
     messages = [
@@ -146,6 +161,7 @@ async def run_pipeline(
     messages: list[dict],
     preferences: dict,
     session_id: str,
+    pre_searched_products: list[dict] | None = None,
 ) -> AsyncGenerator[dict, None]:
     """
     Full multi-agent pipeline. Yields SSE-compatible dicts.
@@ -208,7 +224,7 @@ async def run_pipeline(
             yield {
                 "type": "metadata",
                 "preferences": preferences,
-                "products": [p.model_dump() for p in all_to_add],
+                "products": [],
                 "auto_cart_products": [p.model_dump() for p in all_to_add],
             }
             yield {"type": "done"}
@@ -224,20 +240,24 @@ async def run_pipeline(
             yield {"type": "done"}
             return
 
-        # ── Step 2: Search ───────────────────────────────────────────────────
-        print(f"[ORCHESTRATOR] Step 2/6 -> Search Agent")
-        search_result = await _run_search_agent(intent)
-        queries = [
-            search_result.get("primary_query", ""),
-            *search_result.get("query_variants", [])[:2],
-        ]
-        if search_result.get("fallback_query"):
-            queries.append(search_result["fallback_query"])
-        print(f"[ORCHESTRATOR] Search queries built: {queries}")
+        # ── Step 2 & 3: Search (or use pre-searched from visual search) ─────────
+        if pre_searched_products:
+            from app.schemas.product import Product
+            print(f"[ORCHESTRATOR] Visual search products provided -> skipping search agents ({len(pre_searched_products)} products)")
+            raw_products = [Product(**p) for p in pre_searched_products]
+        else:
+            print(f"[ORCHESTRATOR] Step 2/6 -> Search Agent")
+            search_result = await _run_search_agent(intent)
+            queries = [
+                search_result.get("primary_query", ""),
+                *search_result.get("query_variants", [])[:2],
+            ]
+            if search_result.get("fallback_query"):
+                queries.append(search_result["fallback_query"])
+            print(f"[ORCHESTRATOR] Search queries built: {queries}")
 
-        # ── Step 3: Get products ─────────────────────────────────────────────
-        print(f"[ORCHESTRATOR] Step 3/6 -> Shopify Product Search")
-        raw_products = shopify_service.search_products(queries, limit=10)
+            print(f"[ORCHESTRATOR] Step 3/6 -> Shopify Product Search")
+            raw_products = shopify_service.search_products(queries, limit=10)
         print(f"[ORCHESTRATOR] Products found: {len(raw_products)} | Titles: {[p.title for p in raw_products[:4]]}")
         if not raw_products:
             no_match_msg = (
@@ -264,16 +284,18 @@ async def run_pipeline(
         ranked_products = [product_map[pid] for pid in ranked_ids if pid in product_map]
         print(f"[ORCHESTRATOR] Ranked products (score>=35): {[p.title for p in ranked_products[:3]]}")
 
+        force_recommend = False
         if not ranked_products:
-            # All products scored too low — best available but nothing really matched
+            # All products scored too low — use best available and force positive recommendation
+            force_recommend = True
             best = sorted(
                 compare_result.get("ranked_products", []),
                 key=lambda p: p.get("score", 0),
                 reverse=True,
-            )[:1]
+            )[:3]
             best_ids = [p["product_id"] for p in best]
             ranked_products = [product_map[pid] for pid in best_ids if pid in product_map]
-            print(f"[ORCHESTRATOR] No products passed score threshold -> using single best: {[p.title for p in ranked_products]}")
+            print(f"[ORCHESTRATOR] No products passed score threshold -> using best available (force_recommend=True): {[p.title for p in ranked_products]}")
 
         # Store for future cart_add intent
         products_to_store = ranked_products if ranked_products else raw_products[:3]
@@ -286,7 +308,7 @@ async def run_pipeline(
         # ── Step 6: Stream final response ────────────────────────────────────
         print(f"[ORCHESTRATOR] Step 6/6 -> Streaming Final Response")
         full_response = ""
-        async for token in _stream_final_response(intent, compare_result, explain_result, list(messages)):
+        async for token in _stream_final_response(intent, compare_result, explain_result, list(messages), force_recommend):
             full_response += token
             yield {"type": "token", "content": token}
         print(f"[ORCHESTRATOR] Final response streamed ({len(full_response)} chars)")

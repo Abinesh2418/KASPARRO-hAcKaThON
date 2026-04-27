@@ -3,26 +3,26 @@ import json
 import httpx
 from app.core.config import settings
 
-VISION_PROMPT = """Analyze this fashion item image and extract the following attributes. Respond ONLY with valid JSON, no other text.
+VISION_PROMPT = """Look at this image carefully and identify the main product. Respond ONLY with valid JSON matching this exact structure, no other text.
+
+IMPORTANT: If you see a watch (wristwatch, timepiece, analog watch, digital watch), set category to "watch" and include "watch" and "analog" in keywords.
 
 {
-  "style": ["list of style descriptors e.g. casual, formal, streetwear, minimal, bohemian"],
-  "colors": ["primary colors in the item"],
-  "silhouette": "overall shape e.g. fitted, oversized, flowy, structured",
-  "category": "one of: tops, bottoms, dresses, outerwear, shoes, accessories",
-  "material_guess": "likely fabric e.g. cotton, denim, silk, leather",
-  "occasion": ["suitable occasions e.g. casual, work, evening, sport"],
-  "description": "one sentence describing the item"
+  "keywords": ["the 3-5 most specific product search terms — for a watch use: 'watch', 'analog watch', 'silver watch'; for a shirt use: 'shirt', 'formal shirt'; etc."],
+  "style": ["2-3 style words: minimal, classic, casual, formal, sporty, elegant, streetwear"],
+  "colors": ["1-3 main colors visible"],
+  "category": "ONE word: watch OR dress OR shirt OR jeans OR shoes OR jacket OR bag OR jewelry",
+  "occasion": ["1-2 occasions: casual, formal, office, sport, evening"],
+  "description": "one sentence: what is this product exactly"
 }"""
 
 _MOCK_ATTRIBUTES = {
+    "keywords": [],
     "style": ["casual", "minimal"],
-    "colors": ["white", "neutral"],
-    "silhouette": "relaxed",
-    "category": "tops",
-    "material_guess": "cotton",
+    "colors": ["silver"],
+    "category": "accessories",
     "occasion": ["casual", "everyday"],
-    "description": "A clean, minimalist casual top suitable for everyday wear.",
+    "description": "A product item.",
 }
 
 
@@ -44,6 +44,7 @@ async def analyze_image(image_bytes: bytes) -> dict:
                         }
                     ],
                     "stream": False,
+                    "keep_alive": "30m",
                 },
             )
             response.raise_for_status()

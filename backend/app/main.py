@@ -12,7 +12,7 @@ logging.basicConfig(
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Curio API",
-        description="AI-powered fashion shopping assistant — Groq chat + Gemma4 visual search",
+        description="AI-powered fashion shopping assistant — Azure OpenAI gpt-4o + llamavision",
         version="2.0.0",
         docs_url="/docs",
         redoc_url="/redoc",

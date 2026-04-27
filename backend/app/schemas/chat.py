@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Any
 
 
 class ChatMessage(BaseModel):
@@ -11,3 +11,4 @@ class ChatRequest(BaseModel):
     prompt: str
     session_id: Optional[str] = None
     messages: List[ChatMessage] = []
+    pre_searched_products: Optional[List[Any]] = None

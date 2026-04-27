@@ -16,7 +16,7 @@ FASHION CONTEXT — understand these Indian market specifics:
 - Occasions: college, office, casual, date, date night, wedding, reception, sangeet, mehendi, puja, festival, Diwali, Holi, party, beach, travel, gym, brunch, interview, internship
 - Indian categories: kurta, kurti, saree, salwar, lehenga, sharara, dupatta, indo-western, fusion wear, ethnic, western
 - Size context: XS/S/M/L/XL/XXL, or Indian numeric sizes (36, 38, 40...)
-- Budget: ₹ values — ₹500 is very budget, ₹1000-3000 is mid-range, ₹5000+ is premium
+- Budget: default currency is ₹ (INR) — ₹500 is very budget, ₹1000-3000 is mid-range, ₹5000+ is premium. If user explicitly writes "$" treat as USD (do NOT convert to INR).
 - Style vocabulary: minimal, chic, boho, bohemian, classic, edgy, streetwear, preppy, vintage, romantic, elegant, sporty, athleisure, festive, ethnic, contemporary
 
 EXTRACTION RULES:
@@ -29,7 +29,7 @@ EXTRACTION RULES:
 - Detect Indian occasion signals: "interview hai", "wedding season", "festival look", "college mein"
 - Normalize informal language: "kuch casual" → casual wear, "shaadi" → wedding, "office jaana hai" → office wear
 - For gift_finder: extract recipient_description (e.g. "mom who likes sarees", "sister who is into streetwear")
-- "$2000" or "2000" without currency symbol in an Indian context = ₹2000, not USD
+- "2000" without any currency symbol in an Indian context = ₹2000. But "$2000" explicitly means USD — never reinterpret a "$" amount as ₹.
 
 SEQUENTIAL CLARIFICATION — check the conversation history and ask the NEXT unanswered question:
 
