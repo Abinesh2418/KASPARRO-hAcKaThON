@@ -33,6 +33,9 @@ const initialState: ChatState = {
   sessionId: null,
   preferences: initialPreferences,
   error: null,
+  agentSteps: [],
+  pipelineStartTime: null,
+  pipelineEndTime: null,
 };
 
 function loadFromStorage(): ChatState {
@@ -130,6 +133,22 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
 
     case "CLEAR_ERROR":
       return { ...state, error: null };
+
+    case "RESET_PIPELINE":
+      return { ...state, agentSteps: [], pipelineStartTime: Date.now(), pipelineEndTime: null };
+
+    case "AGENT_STEP": {
+      const idx = state.agentSteps.findIndex(s => s.agent === action.payload.agent);
+      if (idx >= 0) {
+        const updated = [...state.agentSteps];
+        updated[idx] = action.payload;
+        return { ...state, agentSteps: updated };
+      }
+      return { ...state, agentSteps: [...state.agentSteps, action.payload] };
+    }
+
+    case "PIPELINE_COMPLETE":
+      return { ...state, pipelineEndTime: Date.now() };
 
     case "CLEAR_CHAT":
       return { ...initialState };
@@ -245,6 +264,9 @@ export function useChat() {
         imageUrl = URL.createObjectURL(file);
       }
 
+      // Reset agent pipeline for new message
+      dispatch({ type: "RESET_PIPELINE" });
+
       // Show user message + typing indicator IMMEDIATELY — don't wait for Ollama
       const userMsgId = generateId();
       const assistantMsgId = generateId();
@@ -332,8 +354,14 @@ export function useChat() {
               }
               break;
             }
+            case "agent_step":
+              if (event.agent && event.status) {
+                dispatch({ type: "AGENT_STEP", payload: { agent: event.agent, status: event.status, data: event.data } });
+              }
+              break;
             case "done":
               dispatch({ type: "FINISH_STREAMING" });
+              dispatch({ type: "PIPELINE_COMPLETE" });
               break;
             case "error":
               dispatch({ type: "SET_ERROR", payload: event.message ?? "Unknown error" });
@@ -350,5 +378,5 @@ export function useChat() {
     [state.isStreaming, state.sessionId, state.messages, scrollToBottom]
   );
 
-  return { state, sendMessage, newChat, loadChat, clearChat, deleteChat, clearHistory, chatHistory, bottomRef, scrollToBottom };
+  return { state, sendMessage, newChat, loadChat, clearChat, deleteChat, clearHistory, chatHistory, bottomRef, scrollToBottom, agentSteps: state.agentSteps, pipelineStartTime: state.pipelineStartTime, pipelineEndTime: state.pipelineEndTime, isPipelineRunning: state.isStreaming && state.agentSteps.length > 0 };
 }

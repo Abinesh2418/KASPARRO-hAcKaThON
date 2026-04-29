@@ -31,7 +31,7 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-16 lg:w-56 flex flex-col bg-zinc-900/95 border-r border-zinc-800/60 z-40 backdrop-blur-sm">
+    <aside className="fixed left-0 top-0 h-full w-14 lg:w-44 flex flex-col bg-zinc-900/95 border-r border-zinc-800/60 z-40 backdrop-blur-sm">
       {/* Logo */}
       <div className="flex items-center gap-3 px-3 lg:px-4 py-5 border-b border-zinc-800/60">
         <div className="h-9 w-9 flex-shrink-0 rounded-xl bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center shadow-lg shadow-violet-900/40">

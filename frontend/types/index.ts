@@ -109,6 +109,9 @@ export interface ChatState {
   sessionId: string | null;
   preferences: Preferences;
   error: string | null;
+  agentSteps: AgentStep[];
+  pipelineStartTime: number | null;
+  pipelineEndTime: number | null;
 }
 
 export type ChatAction =
@@ -121,7 +124,10 @@ export type ChatAction =
   | { type: "SET_ERROR"; payload: string }
   | { type: "CLEAR_ERROR" }
   | { type: "CLEAR_CHAT" }
-  | { type: "LOAD_CHAT"; payload: { messages: Message[]; sessionId: string | null; preferences: Preferences } };
+  | { type: "LOAD_CHAT"; payload: { messages: Message[]; sessionId: string | null; preferences: Preferences } }
+  | { type: "RESET_PIPELINE" }
+  | { type: "AGENT_STEP"; payload: AgentStep }
+  | { type: "PIPELINE_COMPLETE" };
 
 export interface SavedChat {
   id: string;
@@ -146,8 +152,54 @@ export interface VisualSearchResult {
   products: Product[];
 }
 
+// ── Agent Pipeline Types ─────────────────────────────────────────────────────
+
+export type AgentName = "intent" | "search" | "fetch" | "compare" | "explain" | "tradeoff" | "cart" | "checkout";
+export type AgentStatus = "waiting" | "running" | "complete" | "skipped";
+
+export interface AgentStepData {
+  // Intent
+  intent_type?: string;
+  occasion?: string | null;
+  budget_max?: number | null;
+  budget_min?: number | null;
+  product_category?: string | null;
+  constraints?: string[];
+  preferences?: string[];
+  gender?: string | null;
+  recipient?: string | null;
+  recipient_description?: string | null;
+  confidence?: number;
+  // Search
+  primary_query?: string;
+  query_variants?: string[];
+  fallback_query?: string | null;
+  // Fetch
+  total?: number;
+  merchants?: { name: string; count: number }[];
+  // Compare
+  total_candidates?: number;
+  finalists_count?: number;
+  ranked_products?: { id: string; title: string; score: number; selected: boolean }[];
+  // Explain
+  explanations?: { product_id: string; title: string; rationale: string }[];
+  // Tradeoff
+  panels?: { id: string; title: string; product_id: string; highlight: string; tradeoff: string }[];
+  // Cart
+  added?: { title: string; price: number; merchant: string }[];
+  // Checkout
+  checkout_merchants?: { name: string; item_count: number; subtotal: number }[];
+  grand_total?: number;
+}
+
+export interface AgentStep {
+  agent: AgentName;
+  status: AgentStatus;
+  data?: AgentStepData;
+}
+
 export interface SSEEvent {
-  type: "session_id" | "token" | "metadata" | "done" | "error";
+  type: "session_id" | "token" | "metadata" | "done" | "error" | "agent_step";
   session_id?: string;
   content?: string;
   preferences?: Preferences;
@@ -167,6 +219,10 @@ export interface SSEEvent {
   // Tradeoff matrix fields
   scored_products?: ScoredProduct[];
   tradeoff_panels?: TradeoffPanel[];
+  // Agent step fields
+  agent?: AgentName;
+  status?: AgentStatus;
+  data?: AgentStepData;
 }
 
 export interface CartItem {
