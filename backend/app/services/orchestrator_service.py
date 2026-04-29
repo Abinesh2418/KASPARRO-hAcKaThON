@@ -19,6 +19,7 @@ from app.core.prompts import (
     SEARCH_AGENT_PROMPT,
     COMPARE_AGENT_PROMPT,
     EXPLAIN_AGENT_PROMPT,
+    TRADEOFF_AGENT_PROMPT,
 )
 from app.core.prompts.orchestrator import FINAL_RESPONSE_PROMPT
 
@@ -93,12 +94,35 @@ async def _run_explain_agent(compare_result: dict, intent: dict, raw_products) -
     return result
 
 
+async def _run_tradeoff_agent(ranked_products, intent: dict) -> dict:
+    print(f"[TRADEOFF AGENT] Running... | {len(ranked_products)} products")
+    products_summary = [
+        {
+            "product_id": p.id,
+            "title": p.title,
+            "price": p.price,
+            "category": p.category,
+            "style": p.style,
+            "colors": p.colors,
+            "tags": p.tags,
+        }
+        for p in ranked_products
+    ]
+    payload = json.dumps({"ranked_products": products_summary, "intent": intent})
+    result = await llm_service.call_json_agent(TRADEOFF_AGENT_PROMPT, payload)
+    scored = result.get("scored_products", [])
+    panels = result.get("tradeoff_panels", [])
+    print(f"[TRADEOFF AGENT] Done -> {len(scored)} scored products, {len(panels)} panels")
+    return result
+
+
 async def _stream_final_response(
     intent: dict,
     compare_result: dict,
     explain_result: dict,
     history: list[dict],
     force_recommend: bool = False,
+    max_products: int = 3,
 ) -> AsyncGenerator[str, None]:
     explanations = {
         e["product_id"]: e["why_recommended"]
@@ -109,7 +133,7 @@ async def _stream_final_response(
     # Strip scores — LLM seeing low scores causes it to say "couldn't find"
     top_products_clean = [
         {k: v for k, v in p.items() if k != "score"}
-        for p in ranked[:3]
+        for p in ranked[:max_products]
     ]
 
     force_note = (
@@ -159,66 +183,88 @@ async def _handle_checkout(
         yield {"type": "done"}
         return
 
-    # Build cart_lines from stored variant_ids (set when products were added to cart)
-    cart_lines = []
+    # Group cart items by merchant_url
+    merchant_groups: dict[str, list[dict]] = {}
     for item in cart_items:
-        vid = item.get("variant_id")
-        if vid:
-            cart_lines.append({"merchandiseId": vid, "quantity": item.get("quantity", 1)})
-    print(f"[CHECKOUT] cart_lines with variant IDs: {len(cart_lines)} / {len(cart_items)} items")
+        # Fall back to first configured merchant if item has no merchant_url
+        merchant_url = item.get("merchant_url") or (settings.merchants[0].url if settings.merchants else "")
+        if merchant_url not in merchant_groups:
+            merchant_groups[merchant_url] = []
+        merchant_groups[merchant_url].append(item)
 
-    # Compute totals
+    print(f"[CHECKOUT] Grouped into {len(merchant_groups)} merchant(s): {list(merchant_groups.keys())}")
+
     grand_total = sum(i["price"] * i.get("quantity", 1) for i in cart_items)
     total_items = sum(i.get("quantity", 1) for i in cart_items)
-    merchant_url = settings.SHOPIFY_STORE_URL
-    merchant_name = merchant_url.split(".")[0].replace("-", " ").title()
 
-    # Build item details for the checkout card
-    checkout_items = [
-        {
-            "title": i["title"],
-            "size": i.get("size"),
-            "color": None,
-            "quantity": i.get("quantity", 1),
-            "price": i["price"],
-            "image": i.get("image", ""),
-            "subtotal_for_line": i["price"] * i.get("quantity", 1),
-        }
-        for i in cart_items
-    ]
+    checkouts = []
+    for step, (merchant_url, items) in enumerate(merchant_groups.items(), 1):
+        # Find merchant config for storefront token
+        merchant_cfg = settings.get_merchant_by_url(merchant_url)
+        merchant_name = items[0].get("merchant_name") or (merchant_cfg.name if merchant_cfg else merchant_url.split(".")[0].title())
 
-    # Call Shopify cartCreate with real variant IDs
-    checkout_url = f"https://{merchant_url}/cart"
-    if cart_lines and settings.SHOPIFY_STOREFRONT_TOKEN:
-        try:
-            result = await shopify_service.shopify_cart_create(
-                merchant_url=merchant_url,
-                storefront_token=settings.SHOPIFY_STOREFRONT_TOKEN,
-                cart_lines=cart_lines,
-            )
-            checkout_url = result["checkout_url"]
-            print(f"[CHECKOUT] cartCreate OK: {checkout_url[:80]}")
-        except Exception as e:
-            logger.warning(f"[CHECKOUT] cartCreate failed: {e} — using fallback URL")
-    else:
-        print(f"[CHECKOUT] No variant_ids found — using store fallback URL")
+        subtotal = sum(i["price"] * i.get("quantity", 1) for i in items)
+        item_count = sum(i.get("quantity", 1) for i in items)
+
+        checkout_items = [
+            {
+                "title": i["title"],
+                "size": i.get("size"),
+                "color": None,
+                "quantity": i.get("quantity", 1),
+                "price": i["price"],
+                "image": i.get("image", ""),
+                "subtotal_for_line": i["price"] * i.get("quantity", 1),
+            }
+            for i in items
+        ]
+
+        # Build cart_lines for this merchant
+        cart_lines = [
+            {"merchandiseId": i["variant_id"], "quantity": i.get("quantity", 1)}
+            for i in items
+            if i.get("variant_id")
+        ]
+        print(f"[CHECKOUT] {merchant_name}: {len(cart_lines)}/{len(items)} items have variant IDs")
+
+        # Call Shopify cartCreate for this merchant
+        checkout_url = f"https://{merchant_url}/cart"
+        if cart_lines and merchant_cfg and merchant_cfg.storefront_token:
+            try:
+                result = await shopify_service.shopify_cart_create(
+                    merchant_url=merchant_url,
+                    storefront_token=merchant_cfg.storefront_token,
+                    cart_lines=cart_lines,
+                )
+                checkout_url = result["checkout_url"]
+                print(f"[CHECKOUT] {merchant_name}: cartCreate OK -> {checkout_url[:80]}")
+            except Exception as e:
+                logger.warning(f"[CHECKOUT] {merchant_name}: cartCreate failed: {e} — using fallback URL")
+        else:
+            print(f"[CHECKOUT] {merchant_name}: no variant IDs or token — using fallback URL")
+
+        checkouts.append({
+            "step": step,
+            "merchant_name": merchant_name,
+            "merchant_url": merchant_url,
+            "items": checkout_items,
+            "item_count": item_count,
+            "subtotal": subtotal,
+            "checkout_url": checkout_url,
+        })
+
+    is_multi = len(checkouts) > 1
 
     # Stream user-facing message
     names = ", ".join(f"**{i['title']}**" for i in cart_items[:2])
     extra = f" +{len(cart_items) - 2} more" if len(cart_items) > 2 else ""
-    msg = f"Here's your cart — {names}{extra}. Tap below to complete your purchase!"
+    if is_multi:
+        merchant_names = " and ".join(c["merchant_name"] for c in checkouts)
+        msg = f"Here's your cart — {names}{extra}. You'll checkout separately with {merchant_names}. Tap the buttons below!"
+    else:
+        msg = f"Here's your cart — {names}{extra}. Tap below to complete your purchase!"
     for char in msg:
         yield {"type": "token", "content": char}
-
-    checkouts = [{
-        "merchant_name": merchant_name,
-        "merchant_url": merchant_url,
-        "items": checkout_items,
-        "item_count": total_items,
-        "subtotal": grand_total,
-        "checkout_url": checkout_url,
-        "step": 1,
-    }]
 
     yield {
         "type": "metadata",
@@ -226,12 +272,12 @@ async def _handle_checkout(
         "products": [],
         "show_checkout_cta": True,
         "show_cart_summary": True,
-        "is_multi_merchant": False,
-        "merchant_count": 1,
+        "is_multi_merchant": is_multi,
+        "merchant_count": len(checkouts),
         "checkouts": checkouts,
         "grand_total": grand_total,
         "total_items": total_items,
-        "currency": "INR",
+        "currency": "USD",
     }
     yield {"type": "done"}
 
@@ -297,7 +343,7 @@ async def run_pipeline(
             else:
                 lines = ", ".join(f"**{i['title']}**{' ('+i['size']+')' if i.get('size') else ''}" for i in cart)
                 total = sum(i["price"] * i.get("quantity", 1) for i in cart)
-                msg = f"You have {len(cart)} item(s) in your cart: {lines}. Total: ₹{total:,.0f}."
+                msg = f"You have {len(cart)} item(s) in your cart: {lines}. Total: ${total:,.0f}."
             for char in msg:
                 yield {"type": "token", "content": char}
             yield {"type": "metadata", "preferences": preferences, "products": []}
@@ -309,6 +355,45 @@ async def run_pipeline(
             print(f"[ORCHESTRATOR] Non-shopping intent -> skipping product pipeline")
             async for event in azure_service.stream_chat(messages, preferences):
                 yield event
+            yield {"type": "metadata", "preferences": preferences, "products": []}
+            yield {"type": "done"}
+            return
+
+        # ── Cart remove intent ───────────────────────────────────────────────
+        if intent_type == "cart_remove":
+            cart = cart_service.get_cart(username) if username else []
+            if not cart:
+                msg = "Your cart is already empty."
+            else:
+                user_lower = user_message.lower()
+                # Check for "clear all" / "remove everything" / "empty cart"
+                clear_all_keywords = ["everything", "all", "clear", "empty", "all items", "all products"]
+                is_clear_all = any(kw in user_lower for kw in clear_all_keywords)
+                if is_clear_all:
+                    count = len(cart)
+                    cart_service.clear_cart(username)
+                    msg = f"Done! All {count} item{'s' if count != 1 else ''} have been removed. Your cart is now empty. What would you like to find?"
+                else:
+                    # Fuzzy-match against cart titles to remove a specific item
+                    removed = None
+                    for item in cart:
+                        title_words = [w for w in item["title"].lower().split() if len(w) > 2]
+                        if any(w in user_lower for w in title_words):
+                            cart_service.remove_item(username, item["product_id"])
+                            removed = item
+                            break
+                    if removed:
+                        remaining = cart_service.get_cart(username)
+                        if remaining:
+                            remain_names = ", ".join(f"**{i['title']}**" for i in remaining)
+                            msg = f"The **{removed['title']}** has been removed. You now have {remain_names} left. Would you like to add anything else?"
+                        else:
+                            msg = f"The **{removed['title']}** has been removed. Your cart is now empty. What would you like to find?"
+                    else:
+                        msg = "I couldn't find that item in your cart. Would you like me to show what's in your cart?"
+            print(f"[ORCHESTRATOR] Cart remove handled -> '{msg[:80]}'")
+            for char in msg:
+                yield {"type": "token", "content": char}
             yield {"type": "metadata", "preferences": preferences, "products": []}
             yield {"type": "done"}
             return
@@ -328,15 +413,46 @@ async def run_pipeline(
 
             # Match specific requested items if user named them
             requested_items = intent.get("requested_items", [])
-            if requested_items:
+
+            # Ordinal position map — check user message directly
+            _ORDINALS = {
+                "first": 0, "1st": 0,
+                "second": 1, "2nd": 1,
+                "third": 2, "3rd": 2,
+                "fourth": 3, "4th": 3,
+                "fifth": 4, "5th": 4,
+            }
+            user_lower = user_message.lower()
+            positional_indices = sorted({
+                idx for word, idx in _ORDINALS.items() if word in user_lower
+            })
+            if "last" in user_lower:
+                positional_indices = sorted(set(positional_indices) | {len(last_products) - 1})
+
+            # Check for "add all / add everything"
+            add_all_keywords = ["all", "everything", "every", "all of them", "all items", "all products", "the lot"]
+            wants_all = any(kw in user_lower for kw in add_all_keywords)
+
+            if positional_indices:
+                all_to_add = [last_products[i] for i in positional_indices if i < len(last_products)]
+                print(f"[ORCHESTRATOR] Positional add ({positional_indices}) -> {[p.title for p in all_to_add]}")
+            elif wants_all:
+                all_to_add = last_products
+                print(f"[ORCHESTRATOR] Add all -> {[p.title for p in all_to_add]}")
+            elif requested_items:
                 def _matches(product, query: str) -> bool:
                     title = product.title.lower()
-                    return any(word in title for word in query.lower().split() if len(word) > 2)
+                    # Use words >3 chars to skip noise; require ≥60% to match
+                    q_words = [w for w in query.lower().split() if len(w) > 3]
+                    if not q_words:
+                        return False
+                    hits = sum(1 for w in q_words if w in title)
+                    return hits / len(q_words) >= 0.6
                 matched = [p for p in last_products if any(_matches(p, q) for q in requested_items)]
-                all_to_add = matched if matched else last_products[:3]
+                all_to_add = matched if matched else last_products
                 print(f"[ORCHESTRATOR] Requested: {requested_items} -> matched: {[p.title for p in all_to_add]}")
             else:
-                all_to_add = last_products[:3]
+                all_to_add = last_products
                 print(f"[ORCHESTRATOR] No specific items requested -> adding all: {[p.title for p in all_to_add]}")
 
             names = " + ".join(f"**{p.title}**" for p in all_to_add)
@@ -370,12 +486,24 @@ async def run_pipeline(
         else:
             print(f"[ORCHESTRATOR] Step 2/6 -> Search Agent")
             search_result = await _run_search_agent(intent)
-            queries = [
-                search_result.get("primary_query", ""),
-                *search_result.get("query_variants", [])[:2],
-            ]
-            if search_result.get("fallback_query"):
-                queries.append(search_result["fallback_query"])
+
+            routine_queries = search_result.get("routine_queries")
+            if routine_queries and isinstance(routine_queries, list):
+                # routine_builder: flatten all step-queries
+                queries = []
+                for rq in routine_queries:
+                    if isinstance(rq, str):
+                        queries.append(rq)
+                    elif isinstance(rq, dict):
+                        queries.append(rq.get("query", ""))
+                queries = [q for q in queries if q]
+            else:
+                queries = [
+                    search_result.get("primary_query", ""),
+                    *search_result.get("query_variants", [])[:2],
+                ]
+                if search_result.get("fallback_query"):
+                    queries.append(search_result["fallback_query"])
             print(f"[ORCHESTRATOR] Search queries built: {queries}")
 
             print(f"[ORCHESTRATOR] Step 3/6 -> Shopify Product Search")
@@ -419,18 +547,15 @@ async def run_pipeline(
             ranked_products = [product_map[pid] for pid in best_ids if pid in product_map]
             print(f"[ORCHESTRATOR] No products passed score threshold -> using best available (force_recommend=True): {[p.title for p in ranked_products]}")
 
-        # Store for future cart_add intent
-        products_to_store = ranked_products if ranked_products else raw_products[:3]
-        preference_service.set_last_products(session_id, products_to_store)
-
         # ── Step 5: Explain ──────────────────────────────────────────────────
         print(f"[ORCHESTRATOR] Step 5/6 -> Explain Agent")
         explain_result = await _run_explain_agent(compare_result, intent, raw_products[:6])
 
         # ── Step 6: Stream final response ────────────────────────────────────
         print(f"[ORCHESTRATOR] Step 6/6 -> Streaming Final Response")
+        max_products_in_response = 4 if intent_type == "routine_builder" else 3
         full_response = ""
-        async for token in _stream_final_response(intent, compare_result, explain_result, list(messages), force_recommend):
+        async for token in _stream_final_response(intent, compare_result, explain_result, list(messages), force_recommend, max_products=max_products_in_response):
             full_response += token
             yield {"type": "token", "content": token}
         print(f"[ORCHESTRATOR] Final response streamed ({len(full_response)} chars)")
@@ -439,14 +564,54 @@ async def run_pipeline(
         updated_prefs = _merge_intent_into_preferences(intent, preferences)
         # Only show product cards when products genuinely scored above threshold.
         # force_recommend=True means nothing matched — AI says "not available", so no cards.
-        products_to_return = ranked_products[:6] if not force_recommend else []
+        # Routine builder returns 1 product per step (max 4 steps); single product returns up to 3.
+        if force_recommend:
+            products_to_return = []
+        elif intent_type == "routine_builder":
+            # Sort by skincare/outfit routine step order so cards match the AI text
+            _ROUTINE_STEP_ORDER = [
+                "cleanser", "face wash", "cleansing", "micellar",   # step 1
+                "toner", "mist", "essence",                          # step 2
+                "serum", "treatment", "ampoule", "vitamin c",        # step 3
+                "moisturizer", "moisturiser", "cream", "lotion",     # step 4
+                "sunscreen", "spf", "sunblock", "uv",               # step 5
+                "mask", "pack", "scrub",                             # step 6
+            ]
+            def _routine_sort_key(p):
+                combined = (p.title + " " + " ".join(p.tags)).lower()
+                for i, kw in enumerate(_ROUTINE_STEP_ORDER):
+                    if kw in combined:
+                        return i
+                return len(_ROUTINE_STEP_ORDER)
+            products_to_return = sorted(ranked_products[:4], key=_routine_sort_key)
+        else:
+            products_to_return = ranked_products[:3]
+
+        # Store exactly what is shown as cards so cart_add always matches what user sees
+        preference_service.set_last_products(session_id, products_to_return if products_to_return else raw_products[:3])
         print(f"[ORCHESTRATOR] Pipeline complete | Returning {len(products_to_return)} products (force_recommend={force_recommend}) | Updated prefs: {updated_prefs}")
 
-        yield {
+        metadata_event: dict = {
             "type": "metadata",
             "preferences": updated_prefs,
             "products": [p.model_dump() for p in products_to_return],
         }
+
+        # Run tradeoff agent only for single-product comparison (not routines/outfits)
+        if not force_recommend and products_to_return and intent_type == "single_product":
+            try:
+                tradeoff_result = await _run_tradeoff_agent(products_to_return[:3], intent)
+                scored_products = tradeoff_result.get("scored_products", [])
+                tradeoff_panels = tradeoff_result.get("tradeoff_panels", [])
+                if scored_products:
+                    metadata_event["scored_products"] = scored_products
+                if tradeoff_panels:
+                    metadata_event["tradeoff_panels"] = tradeoff_panels
+                print(f"[ORCHESTRATOR] Tradeoff matrix attached: {len(scored_products)} scored, {len(tradeoff_panels)} panels")
+            except Exception as te:
+                logger.warning(f"[ORCHESTRATOR] Tradeoff agent failed (non-critical): {te}")
+
+        yield metadata_event
         yield {"type": "done"}
 
     except Exception as e:
@@ -454,3 +619,5 @@ async def run_pipeline(
         print(f"[ORCHESTRATOR] FAILED: {e} | Falling back to azure_service")
         async for event in azure_service.stream_chat(messages, preferences):
             yield event
+        yield {"type": "metadata", "preferences": preferences, "products": []}
+        yield {"type": "done"}

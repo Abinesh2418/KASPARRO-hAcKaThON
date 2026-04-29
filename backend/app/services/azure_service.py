@@ -69,3 +69,5 @@ async def stream_chat(
                 yield {"type": "token", "content": delta.content}
     except Exception as e:
         yield {"type": "error", "message": str(e)}
+    finally:
+        yield {"type": "done"}

@@ -18,3 +18,5 @@ class Product(BaseModel):
     reviews_count: int
     variant_id: Optional[str] = None   # default variant GID for cartCreate
     variants: List[dict] = []          # [{id, size, price}] for size-specific checkout
+    merchant_name: Optional[str] = None
+    merchant_url: Optional[str] = None

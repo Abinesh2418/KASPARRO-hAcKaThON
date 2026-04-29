@@ -1,8 +1,21 @@
+"""
+Multi-merchant Shopify service.
+
+Fetches products from ALL configured Shopify stores in parallel and merges them
+into a single searchable catalog. Each product is tagged with its merchant_name
+and merchant_url so the cart and checkout agents can route correctly.
+
+Product IDs are namespaced as "{merchant_slug}_{shopify_numeric_id}" to guarantee
+uniqueness across stores (e.g. "nova_8123456", "indie_8123456").
+"""
 import re
 import logging
 import httpx
-from app.core.config import settings
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from app.core.config import settings, MerchantConfig
 from app.schemas.product import Product
+
+logger = logging.getLogger(__name__)
 
 _CART_CREATE_MUTATION = """
 mutation cartCreate($input: CartInput!) {
@@ -59,11 +72,8 @@ async def shopify_cart_create(
         "currency": cart["cost"]["totalAmount"]["currencyCode"],
     }
 
-logger = logging.getLogger(__name__)
 
-_GRAPHQL_URL = f"https://{settings.SHOPIFY_STORE_URL}/admin/api/2026-04/graphql.json"
-
-_QUERY = """
+_PRODUCTS_QUERY = """
 {
   products(first: 50) {
     edges {
@@ -107,7 +117,7 @@ def _strip_html(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text).strip()
 
 
-def _map_product(node: dict) -> Product:
+def _map_product(node: dict, merchant: MerchantConfig) -> Product:
     options = {opt["name"].lower(): opt["values"] for opt in node.get("options", [])}
 
     variants_raw = node.get("variants", {}).get("edges", [])
@@ -115,11 +125,8 @@ def _map_product(node: dict) -> Product:
     price = float(first_variant["price"]) if first_variant else 0.0
     compare_raw = first_variant.get("compareAtPrice") if first_variant else None
     compare_at_price = float(compare_raw) if compare_raw else None
-
-    # Variant GID for cartCreate (default = first variant)
     variant_id = first_variant["id"] if first_variant else None
 
-    # All variants with size→GID mapping for size-specific checkout
     variants_list = []
     for edge in variants_raw:
         v = edge["node"]
@@ -136,7 +143,10 @@ def _map_product(node: dict) -> Product:
     category = (node.get("productType") or "general").lower()
     style = [t for t in tags if t in _STYLE_KEYWORDS] or ["casual"]
     description = _strip_html(node.get("description", ""))[:500]
-    product_id = node["id"].split("/")[-1]
+
+    # Namespace ID to avoid collisions across stores: "{slug}_{numeric}"
+    numeric_id = node["id"].split("/")[-1]
+    product_id = f"{merchant.slug}_{numeric_id}"
 
     return Product(
         id=product_id,
@@ -154,82 +164,132 @@ def _map_product(node: dict) -> Product:
         reviews_count=0,
         variant_id=variant_id,
         variants=variants_list,
+        merchant_name=merchant.name,
+        merchant_url=merchant.url,
     )
 
 
-_cache: list[Product] | None = None
-
-
-def _get_products() -> list[Product]:
-    global _cache
-    if _cache is not None:
-        print(f"[SHOPIFY] Cache hit -> {len(_cache)} products")
-        return _cache
-
-    print(f"[SHOPIFY] Cache miss -> fetching from Shopify: {_GRAPHQL_URL}")
+def _fetch_store_products(merchant: MerchantConfig) -> list[Product]:
+    """Synchronously fetch all products from a single Shopify store."""
+    url = f"https://{merchant.url}/admin/api/2026-04/graphql.json"
+    print(f"[SHOPIFY] Fetching products from {merchant.name} ({merchant.url})")
     try:
         resp = httpx.post(
-            _GRAPHQL_URL,
+            url,
             headers={
                 "Content-Type": "application/json",
-                "X-Shopify-Access-Token": settings.SHOPIFY_ACCESS_TOKEN,
+                "X-Shopify-Access-Token": merchant.access_token,
             },
-            json={"query": _QUERY},
+            json={"query": _PRODUCTS_QUERY},
             timeout=10.0,
         )
         resp.raise_for_status()
         edges = resp.json()["data"]["products"]["edges"]
         if edges:
-            _cache = [_map_product(e["node"]) for e in edges]
-            logger.info(f"Loaded {len(_cache)} products from Shopify")
-            print(f"[SHOPIFY] Loaded {len(_cache)} products from Shopify API")
-            return _cache
+            products = [_map_product(e["node"], merchant) for e in edges]
+            print(f"[SHOPIFY] {merchant.name}: loaded {len(products)} products")
+            return products
     except Exception as e:
-        logger.warning(f"Shopify API unavailable, falling back to mock data: {e}")
-        print(f"[SHOPIFY] API unavailable ({e}) -> falling back to mock products")
+        logger.warning(f"[SHOPIFY] {merchant.name} API failed: {e}")
+        print(f"[SHOPIFY] {merchant.name}: API failed ({e})")
+    return []
 
-    from app.services import product_service
-    _cache = product_service.get_all_products()
-    print(f"[SHOPIFY] Using mock catalog -> {len(_cache)} products")
-    return _cache
+
+# Combined product cache across all merchants
+_all_products_cache: list[Product] | None = None
+
+
+def _get_all_products() -> list[Product]:
+    """Fetch and cache products from all configured merchants in parallel."""
+    global _all_products_cache
+
+    if _all_products_cache is not None:
+        print(f"[SHOPIFY] Cache hit -> {len(_all_products_cache)} products total")
+        return _all_products_cache
+
+    merchants = settings.merchants
+    if not merchants:
+        print(f"[SHOPIFY] No merchants configured -> using mock catalog")
+        from app.services import product_service
+        _all_products_cache = product_service.get_all_products()
+        return _all_products_cache
+
+    print(f"[SHOPIFY] Fetching from {len(merchants)} merchant(s) in parallel...")
+    all_products: list[Product] = []
+
+    # Parallel fetch from all stores
+    with ThreadPoolExecutor(max_workers=len(merchants)) as pool:
+        futures = {pool.submit(_fetch_store_products, m): m for m in merchants}
+        for future in as_completed(futures):
+            merchant = futures[future]
+            try:
+                products = future.result()
+                all_products.extend(products)
+            except Exception as e:
+                logger.warning(f"[SHOPIFY] {merchant.name} fetch failed: {e}")
+
+    if all_products:
+        _all_products_cache = all_products
+        print(f"[SHOPIFY] Total catalog: {len(_all_products_cache)} products across {len(merchants)} store(s)")
+    else:
+        print(f"[SHOPIFY] All stores failed -> falling back to mock catalog")
+        from app.services import product_service
+        _all_products_cache = product_service.get_all_products()
+
+    return _all_products_cache
+
+
+def invalidate_cache() -> None:
+    global _all_products_cache
+    _all_products_cache = None
+    print("[SHOPIFY] Product cache cleared")
 
 
 def search_products(queries: list[str], limit: int = 20) -> list[Product]:
-    print(f"[SHOPIFY] Searching products | queries: {queries} | limit: {limit}")
-    all_products = _get_products()
-    results: list[Product] = []
-    seen_ids: set[str] = set()
+    print(f"[SHOPIFY] Searching across all stores | queries: {queries} | limit: {limit}")
+    all_products = _get_all_products()
+
+    # score_map: product_id -> (cumulative_score, Product)
+    score_map: dict[str, tuple[int, Product]] = {}
 
     for query in queries:
         if not query:
             continue
-        q = query.lower()
+        tokens = [t for t in query.lower().split() if len(t) >= 2]
+        if not tokens:
+            continue
         matched_this_query = 0
         for p in all_products:
-            if p.id in seen_ids:
-                continue
-            if (
-                q in p.title.lower()
-                or q in p.category
-                or any(q in tag for tag in p.tags)
-                or any(q in s for s in p.style)
-                or any(q in c for c in p.colors)
-            ):
-                results.append(p)
-                seen_ids.add(p.id)
+            hit = 0
+            title_lower = p.title.lower()
+            for token in tokens:
+                if token in title_lower:
+                    hit += 3
+                if token in p.category:
+                    hit += 3
+                if any(token in tag for tag in p.tags):
+                    hit += 2
+                if any(token in s for s in p.style):
+                    hit += 1
+                if any(token in c for c in p.colors):
+                    hit += 1
+            if hit > 0:
                 matched_this_query += 1
-        print(f"[SHOPIFY]   query '{q}' -> {matched_this_query} matches")
+                prev = score_map.get(p.id, (0, p))
+                score_map[p.id] = (prev[0] + hit, p)
+        print(f"[SHOPIFY]   query '{query}' -> {matched_this_query} matches")
 
-    print(f"[SHOPIFY] Total results: {len(results[:limit])} products returned")
+    results = [p for _, p in sorted(score_map.values(), key=lambda x: x[0], reverse=True)]
+    print(f"[SHOPIFY] Total results: {len(results[:limit])} products from {len({p.merchant_name for p in results[:limit]})} store(s)")
     return results[:limit]
 
 
 def get_product_by_id(product_id: str) -> Product | None:
-    for p in _get_products():
+    for p in _get_all_products():
         if p.id == product_id:
             return p
     return None
 
 
 def get_all_products(limit: int = 20) -> list[Product]:
-    return _get_products()[:limit]
+    return _get_all_products()[:limit]
