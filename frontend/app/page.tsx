@@ -14,6 +14,10 @@ import {
   Clock,
   Layers,
   Heart,
+  BarChart3,
+  Store,
+  TrendingUp,
+  GitCompare,
 } from "lucide-react";
 
 const FEATURES = [
@@ -28,9 +32,9 @@ const FEATURES = [
   },
   {
     icon: Layers,
-    title: "7-Agent AI Pipeline",
+    title: "8-Agent AI Pipeline",
     description:
-      "Seven specialized AI agents work in sequence: Intent → Search → Fetch → Compare → Explain → Cart → Checkout. Every recommendation and every purchase is handled end-to-end in one conversation.",
+      "Eight specialized AI agents work in sequence: Intent → Search → Fetch → Compare → Explain → Tradeoff → Cart → Checkout. Every recommendation and every purchase is handled end-to-end in one conversation.",
     color: "from-blue-600/20 to-indigo-700/10 border-blue-500/20",
     iconColor: "text-blue-400",
     iconBg: "bg-blue-500/10",
@@ -71,6 +75,24 @@ const FEATURES = [
     iconColor: "text-cyan-400",
     iconBg: "bg-cyan-500/10",
   },
+  {
+    icon: BarChart3,
+    title: "Visual Tradeoff Matrix",
+    description:
+      "After every recommendation, Curio renders a live score breakdown across 7 dimensions — occasion fit, style, budget, color, availability and value. See exactly why P1 beats P2 at a glance.",
+    color: "from-violet-600/20 to-indigo-700/10 border-violet-500/20",
+    iconColor: "text-violet-400",
+    iconBg: "bg-violet-500/10",
+  },
+  {
+    icon: Store,
+    title: "Multi-Merchant Store",
+    description:
+      "Shop across multiple Shopify stores in one conversation. Curio discovers products from all merchants simultaneously, compares them on the same scale, and checks out through each store separately.",
+    color: "from-fuchsia-600/20 to-pink-700/10 border-fuchsia-500/20",
+    iconColor: "text-fuchsia-400",
+    iconBg: "bg-fuchsia-500/10",
+  },
 ];
 
 const PROS = [
@@ -104,6 +126,16 @@ const PROS = [
     label: "Gets Smarter Each Turn",
     detail: "Curio remembers your preferences within the session and refines with every reply.",
   },
+  {
+    icon: GitCompare,
+    label: "Tradeoff Transparency",
+    detail: "Every top pick comes with a visual 7-dimension score matrix — see exactly why one product beats another.",
+  },
+  {
+    icon: TrendingUp,
+    label: "Shop Across Stores",
+    detail: "Discover and compare products from Nova and Indie in one search. One conversation, multiple merchants.",
+  },
 ];
 
 export default function Home() {
@@ -115,6 +147,17 @@ export default function Home() {
         <div className="absolute inset-0 bg-gradient-to-br from-violet-950/50 via-zinc-950 to-zinc-950 pointer-events-none" />
         <div className="absolute top-0 left-1/3 w-[500px] h-[500px] bg-violet-600/8 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 right-0 w-64 h-64 bg-purple-700/6 rounded-full blur-2xl pointer-events-none" />
+
+        {/* Team badge — top right */}
+        <div className="absolute top-4 right-6 flex items-center gap-2 bg-gradient-to-r from-violet-900/60 to-fuchsia-900/40 border border-violet-500/30 rounded-full px-3 py-1.5 shadow-lg shadow-violet-900/20 backdrop-blur-sm">
+          <span className="flex gap-0.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />
+            <span className="h-1.5 w-1.5 rounded-full bg-fuchsia-400 animate-pulse [animation-delay:150ms]" />
+          </span>
+          <span className="text-[11px] font-bold tracking-wide bg-gradient-to-r from-violet-300 to-fuchsia-300 bg-clip-text text-transparent">
+            Duo Dominators
+          </span>
+        </div>
 
         <div className="relative max-w-2xl">
           <div className="inline-flex items-center gap-2 bg-violet-900/30 border border-violet-700/40 rounded-full px-3 py-1 mb-6">
@@ -151,8 +194,8 @@ export default function Home() {
       <section className="px-6 lg:px-10 pb-12">
         <div className="grid grid-cols-3 gap-4 max-w-sm">
           {[
-            { value: "7", label: "AI Agents" },
-            { value: "Live", label: "Shopify Catalog" },
+            { value: "8", label: "AI Agents" },
+            { value: "Live", label: "2 Shopify Stores" },
             { value: "∞", label: "Style Combos" },
           ].map(({ value, label }) => (
             <div key={label} className="bg-zinc-900/60 border border-zinc-800/60 rounded-xl px-4 py-3 text-center">

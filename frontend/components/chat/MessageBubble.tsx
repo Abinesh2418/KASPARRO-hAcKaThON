@@ -1,14 +1,17 @@
 "use client";
 
 import ReactMarkdown from "react-markdown";
-import { ShoppingBag, ExternalLink } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ShoppingBag, ExternalLink, CheckCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Message, MerchantCheckout } from "@/types";
 import { InlineProducts } from "@/components/products/InlineProducts";
 import { TypingIndicator } from "./TypingIndicator";
+import { TradeoffMatrix } from "./TradeoffMatrix";
 
 interface Props {
   message: Message;
+  onSendMessage?: (msg: string) => void;
 }
 
 function CheckoutCard({ checkouts, grandTotal, totalItems, isMultiMerchant }: {
@@ -17,6 +20,26 @@ function CheckoutCard({ checkouts, grandTotal, totalItems, isMultiMerchant }: {
   totalItems: number;
   isMultiMerchant: boolean;
 }) {
+  const [initiated, setInitiated] = useState<Set<string>>(new Set());
+  const [paid, setPaid] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const onFocus = () => {
+      if (initiated.size > 0) {
+        setPaid(prev => new Set([...prev, ...initiated]));
+        setInitiated(new Set());
+      }
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [initiated]);
+
+  const handleCheckout = (merchantName: string, url: string | null) => {
+    if (!url) return;
+    window.open(url, "_blank");
+    setInitiated(prev => new Set([...prev, merchantName]));
+  };
+
   return (
     <div className="space-y-3 mt-4">
       {/* Cart summary card */}
@@ -28,7 +51,7 @@ function CheckoutCard({ checkouts, grandTotal, totalItems, isMultiMerchant }: {
             <span className="font-semibold text-sm text-zinc-100">Your cart</span>
           </div>
           <span className="text-xs text-zinc-400">
-            {totalItems} item{totalItems !== 1 ? "s" : ""} · ₹{grandTotal.toLocaleString("en-IN")}
+            {totalItems} item{totalItems !== 1 ? "s" : ""} · ${grandTotal.toLocaleString()}
           </span>
         </div>
 
@@ -41,7 +64,7 @@ function CheckoutCard({ checkouts, grandTotal, totalItems, isMultiMerchant }: {
                   🏪 {merchant.merchant_name}
                 </span>
                 <span className="text-xs text-zinc-500">
-                  {merchant.item_count} item{merchant.item_count !== 1 ? "s" : ""} · ₹{merchant.subtotal.toLocaleString("en-IN")}
+                  {merchant.item_count} item{merchant.item_count !== 1 ? "s" : ""} · ${merchant.subtotal.toLocaleString()}
                 </span>
               </div>
 
@@ -60,7 +83,7 @@ function CheckoutCard({ checkouts, grandTotal, totalItems, isMultiMerchant }: {
                       </p>
                     </div>
                     <span className="text-sm font-medium text-zinc-200 whitespace-nowrap">
-                      ₹{item.subtotal_for_line.toLocaleString("en-IN")}
+                      ${item.subtotal_for_line.toLocaleString()}
                     </span>
                   </div>
                 ))}
@@ -73,7 +96,7 @@ function CheckoutCard({ checkouts, grandTotal, totalItems, isMultiMerchant }: {
         <div className="px-4 py-3 bg-zinc-800/50 flex justify-between items-center border-t border-zinc-700">
           <span className="font-semibold text-sm text-zinc-300">Total</span>
           <span className="font-bold text-lg text-zinc-100">
-            ₹{grandTotal.toLocaleString("en-IN")}
+            ${grandTotal.toLocaleString()}
           </span>
         </div>
       </div>
@@ -88,30 +111,36 @@ function CheckoutCard({ checkouts, grandTotal, totalItems, isMultiMerchant }: {
       )}
 
       {/* Checkout buttons — one per merchant */}
-      {checkouts.map((c) => (
-        <button
-          key={c.merchant_name}
-          onClick={() => {
-            if (c.checkout_url) window.open(c.checkout_url, "_blank");
-          }}
-          disabled={!c.checkout_url}
-          className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-3 rounded-xl font-medium text-sm flex items-center justify-between transition-colors"
-        >
-          <span>
-            {isMultiMerchant && `Step ${c.step} of ${checkouts.length} — `}
-            Checkout with {c.merchant_name}
-          </span>
-          <span className="flex items-center gap-2 text-violet-200">
-            ₹{c.subtotal.toLocaleString("en-IN")}
-            <ExternalLink className="h-3 w-3" />
-          </span>
-        </button>
-      ))}
+      {checkouts.map((c) => {
+        const isDone = paid.has(c.merchant_name);
+        return isDone ? (
+          <div key={c.merchant_name} className="w-full px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4" />
+              Paid — {c.merchant_name}
+            </span>
+            <span>${c.subtotal.toLocaleString()}</span>
+          </div>
+        ) : (
+          <button
+            key={c.merchant_name}
+            onClick={() => handleCheckout(c.merchant_name, c.checkout_url)}
+            disabled={!c.checkout_url}
+            className="w-full px-4 py-3 rounded-xl font-medium text-sm flex items-center justify-between bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors"
+          >
+            <span>{isMultiMerchant ? `Step ${c.step} of ${checkouts.length} — ` : ""}Checkout with {c.merchant_name}</span>
+            <span className="flex items-center gap-2 opacity-90">
+              ${c.subtotal.toLocaleString()}
+              <ExternalLink className="h-3 w-3" />
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-export function MessageBubble({ message }: Props) {
+export function MessageBubble({ message, onSendMessage }: Props) {
   const isUser = message.role === "user";
 
   if (isUser) {
@@ -144,7 +173,7 @@ export function MessageBubble({ message }: Props) {
       <div className="flex items-start gap-3">
         {/* Avatar */}
         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center text-xs font-bold text-white shadow-md">
-          S
+          C
         </div>
 
         <div className="flex-1 min-w-0">
@@ -176,6 +205,14 @@ export function MessageBubble({ message }: Props) {
               grandTotal={checkout.grand_total}
               totalItems={checkout.total_items}
               isMultiMerchant={checkout.is_multi_merchant}
+            />
+          )}
+
+          {/* Tradeoff matrix */}
+          {message.tradeoffData && !message.isStreaming && onSendMessage && (
+            <TradeoffMatrix
+              tradeoffData={message.tradeoffData}
+              onSendMessage={onSendMessage}
             />
           )}
         </div>

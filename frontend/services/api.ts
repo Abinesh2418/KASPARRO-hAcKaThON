@@ -109,3 +109,25 @@ export async function removeFromCart(productId: string, username: string): Promi
   const data = await res.json();
   return data.items ?? [];
 }
+
+export interface MerchantCheckoutInfo {
+  step: number;
+  merchant_name: string;
+  merchant_url: string;
+  checkout_url: string;
+  subtotal: number;
+  item_count: number;
+}
+
+export interface CartCheckoutResult {
+  checkouts: MerchantCheckoutInfo[];
+  grand_total: number;
+  total_items: number;
+  is_multi_merchant: boolean;
+}
+
+export async function cartCheckout(username: string): Promise<CartCheckoutResult> {
+  const res = await fetch(`${API_BASE}/api/v1/cart/checkout?username=${username}`, { cache: "no-store" });
+  if (!res.ok) return { checkouts: [], grand_total: 0, total_items: 0, is_multi_merchant: false };
+  return res.json();
+}

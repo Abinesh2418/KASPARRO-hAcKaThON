@@ -104,7 +104,7 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
         preferences: action.payload.preferences,
         messages: state.messages.map((m) =>
           m.id === action.payload.id
-            ? { ...m, products: action.payload.products, isStreaming: false, metadata: action.payload.checkoutMetadata }
+            ? { ...m, products: action.payload.products, isStreaming: false, metadata: action.payload.checkoutMetadata, tradeoffData: action.payload.tradeoffData }
             : m
         ),
       };
@@ -299,6 +299,10 @@ export function useChat() {
                     currency: event.currency ?? "INR",
                   }
                 : undefined;
+              const tradeoffData =
+                event.scored_products && event.scored_products.length >= 1
+                  ? { scored_products: event.scored_products, tradeoff_panels: event.tradeoff_panels ?? [] }
+                  : undefined;
               dispatch({
                 type: "SET_METADATA",
                 payload: {
@@ -306,6 +310,7 @@ export function useChat() {
                   products: event.products ?? [],
                   preferences: event.preferences ?? initialPreferences,
                   checkoutMetadata,
+                  tradeoffData,
                 },
               });
               const productsToAdd = event.auto_cart_products ?? (event.auto_cart_product ? [event.auto_cart_product] : []);
@@ -320,6 +325,8 @@ export function useChat() {
                     image: p.images?.[0] ?? "",
                     size: null,
                     variant_id: p.variant_id,
+                    merchant_url: p.merchant_url,
+                    merchant_name: p.merchant_name,
                   }).catch(console.error);
                 });
               }

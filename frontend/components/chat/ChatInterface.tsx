@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useChat } from "@/hooks/use-chat";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
@@ -37,6 +37,16 @@ export function ChatInterface() {
     newChat();
     setActiveHistoryId(null);
   };
+
+  // Start fresh every time the user navigates to this page
+  const didMountRef = useRef(false);
+  useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      handleNewChat();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleLoadChat = (chat: SavedChat) => {
     loadChat(chat);
@@ -159,7 +169,7 @@ export function ChatInterface() {
               <span className="text-sm font-black text-white">C</span>
             </div>
             <div>
-              <h1 className="text-sm font-bold text-zinc-100 leading-none">Curio AI</h1>
+              <h1 className="text-sm font-bold text-zinc-100 leading-none">Curio AI Agent</h1>
               <p className="text-[10px] text-zinc-500 mt-0.5">AI Fashion Assistant</p>
             </div>
           </div>
@@ -206,7 +216,7 @@ export function ChatInterface() {
               </p>
             </div>
           ) : (
-            <MessageList messages={state.messages} bottomRef={bottomRef} />
+            <MessageList messages={state.messages} bottomRef={bottomRef} onSendMessage={sendMessage} />
           )}
         </div>
 

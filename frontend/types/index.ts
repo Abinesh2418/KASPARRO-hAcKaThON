@@ -14,6 +14,8 @@ export interface Product {
   reviews_count: number;
   variant_id?: string;
   variants?: Array<{ id: string; size: string | null; price: number }>;
+  merchant_name?: string;
+  merchant_url?: string;
 }
 
 export interface Preferences {
@@ -57,6 +59,38 @@ export interface CheckoutMetadata {
   currency: string;
 }
 
+export interface ScoredProductDimensions {
+  occasion_fit: number;
+  style_match: number;
+  budget_fit: number;
+  category_match: number;
+  color_match: number;
+  stock_availability: number;
+  value_score: number;
+}
+
+export interface ScoredProduct {
+  product_id: string;
+  title: string;
+  price: number;
+  score: number;
+  dimension_scores: ScoredProductDimensions;
+}
+
+export interface TradeoffPanel {
+  id: string;
+  title: string;
+  product_id: string;
+  highlight: string;
+  tradeoff: string;
+  quick_replies: string[];
+}
+
+export interface TradeoffData {
+  scored_products: ScoredProduct[];
+  tradeoff_panels: TradeoffPanel[];
+}
+
 export interface Message {
   id: string;
   role: "user" | "assistant";
@@ -66,6 +100,7 @@ export interface Message {
   isError?: boolean;
   imageUrl?: string;
   metadata?: CheckoutMetadata;
+  tradeoffData?: TradeoffData;
 }
 
 export interface ChatState {
@@ -81,7 +116,7 @@ export type ChatAction =
   | { type: "START_ASSISTANT_MESSAGE"; payload: { id: string } }
   | { type: "APPEND_TOKEN"; payload: { id: string; token: string } }
   | { type: "SET_SESSION_ID"; payload: string }
-  | { type: "SET_METADATA"; payload: { id: string; products: Product[]; preferences: Preferences; checkoutMetadata?: CheckoutMetadata } }
+  | { type: "SET_METADATA"; payload: { id: string; products: Product[]; preferences: Preferences; checkoutMetadata?: CheckoutMetadata; tradeoffData?: TradeoffData } }
   | { type: "FINISH_STREAMING" }
   | { type: "SET_ERROR"; payload: string }
   | { type: "CLEAR_ERROR" }
@@ -129,6 +164,9 @@ export interface SSEEvent {
   grand_total?: number;
   total_items?: number;
   currency?: string;
+  // Tradeoff matrix fields
+  scored_products?: ScoredProduct[];
+  tradeoff_panels?: TradeoffPanel[];
 }
 
 export interface CartItem {

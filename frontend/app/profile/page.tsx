@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Tag, Palette, Ruler, Calendar, ArrowRight, MessageCircle } from "lucide-react";
+import { Tag, Palette, Ruler, Calendar, ArrowRight, MessageCircle, Wallet } from "lucide-react";
 import type { Preferences } from "@/types";
 
 const EMPTY_PREFS: Preferences = {
@@ -16,12 +16,12 @@ const EMPTY_PREFS: Preferences = {
 };
 
 const DEMO_PREFS: Preferences = {
-  style: ["minimal", "classic", "formal"],
-  colors: ["black", "white", "silver"],
+  style: ["minimal", "classic", "casual", "elegant"],
+  colors: ["silver", "black", "white", "navy"],
   sizes: ["M"],
   budget_max: 5000,
   budget_min: null,
-  occasions: ["office", "casual", "formal"],
+  occasions: ["casual everyday wear", "office", "formal"],
 };
 
 function EmptyBadge({ label }: { label: string }) {
@@ -60,8 +60,8 @@ export default function ProfilePage() {
           loadedPrefs.budget_max !== null ||
           loadedPrefs.sizes.length > 0);
 
-      // Show demo defaults for demo user when no real preferences exist yet
-      if (!hasPrefs && parsedUser?.username === "demo") {
+      // Show demo defaults for any user when no real preferences exist yet
+      if (!hasPrefs) {
         setPrefs(DEMO_PREFS);
       } else if (loadedPrefs) {
         setPrefs(loadedPrefs);
@@ -181,6 +181,22 @@ export default function ProfilePage() {
                 <EmptyBadge label="Mention occasion in Curio e.g. 'for office'" />
               )}
             </div>
+          </div>
+
+          {/* Budget */}
+          <div className="bg-zinc-900/80 border border-zinc-800/60 rounded-2xl p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Wallet className="h-4 w-4 text-violet-400" />
+              <span className="text-sm font-semibold text-zinc-200">Budget</span>
+            </div>
+            {prefs.budget_max ? (
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-black text-zinc-100">${prefs.budget_max.toLocaleString()}</span>
+                <span className="text-xs text-zinc-500">max per item</span>
+              </div>
+            ) : (
+              <span className="text-zinc-600 text-sm italic">Not set — tell Curio your budget</span>
+            )}
           </div>
 
           {/* CTA */}

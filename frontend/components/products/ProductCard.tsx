@@ -32,6 +32,8 @@ export function ProductCard({ product, compact = false }: Props) {
         image: product.images[0] ?? "",
         size: selectedSize,
         variant_id: matchedVariant?.id ?? product.variant_id,
+        merchant_url: product.merchant_url,
+        merchant_name: product.merchant_name,
       });
     } catch {
       // silently fail — still show feedback
@@ -84,6 +86,14 @@ export function ProductCard({ product, compact = false }: Props) {
           <h3 className={cn("font-medium text-zinc-100 leading-tight", compact ? "text-xs" : "text-sm")}>
             {product.title}
           </h3>
+          {product.merchant_name && (
+            <span className={cn(
+              "inline-block mt-1 font-medium text-violet-400 bg-violet-950/50 border border-violet-800/40 rounded-full",
+              compact ? "text-[9px] px-1.5 py-0.5" : "text-[10px] px-2 py-0.5"
+            )}>
+              {product.merchant_name}
+            </span>
+          )}
           {!compact && (
             <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">{product.description}</p>
           )}

@@ -34,6 +34,8 @@ export function InlineProducts({ products, title }: Props) {
           image: product.images[0] ?? "",
           size: null,
           variant_id: product.variant_id,
+          merchant_url: product.merchant_url,
+          merchant_name: product.merchant_name,
         });
       }
       setAllAdded(true);
