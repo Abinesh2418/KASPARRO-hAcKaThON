@@ -28,8 +28,9 @@ Browser
 | Server | Uvicorn (ASGI) |
 | LLM — Agents & Chat | Azure OpenAI `gpt-4o` |
 | LLM — Vision | Ollama `llama3.2-vision:latest` (configurable) |
-| Product Data | Shopify Admin GraphQL API (fallback: 20-item mock catalog) |
-| Checkout | Shopify Storefront API — `cartCreate` mutation |
+| Product Data | Shopify Admin GraphQL API — product fetch across all merchants |
+| Cart Creation | Shopify Storefront API — `cartCreate` mutation, authenticated via `SHOPIFY_STOREFRONT_TOKEN` per merchant |
+| Checkout URLs | Shopify Storefront API — `cartCreate` returns a live `checkoutUrl` per merchant |
 | Streaming | Server-Sent Events via `StreamingResponse` |
 | Validation | Pydantic v2 |
 | Session Storage | In-memory dict (per-process) |
@@ -48,8 +49,7 @@ Browser
 | Animations | Framer Motion |
 | State | `useReducer` (no global store) |
 | HTTP / SSE | Native `fetch` + `ReadableStream` |
-| Persistence | `localStorage` (chat history, up to 30 saved chats) |
-
+| Persistence | `localStorage` (chat history) |
 ---
 
 ## Project Structure
@@ -114,7 +114,8 @@ kasparo/
 │   │   │   ├── Sidebar.tsx              # Left nav sidebar
 │   │   │   └── ClientLayout.tsx         # Client-side layout wrapper
 │   │   ├── chat/
-│   │   │   ├── ChatInterface.tsx        # Main chat shell
+│   │   │   ├── ChatInterface.tsx        # Main chat shell + Chats/Agents tab switcher
+│   │   │   ├── AgentPanel.tsx           # Live 8-agent reasoning panel (idle/running/complete states)
 │   │   │   ├── MessageList.tsx
 │   │   │   ├── MessageBubble.tsx        # Message + inline checkout card + tradeoff matrix
 │   │   │   ├── TradeoffMatrix.tsx       # 7-dimension score table + Best Fit / Best Value panels
@@ -232,6 +233,45 @@ User: "I'm done / checkout / ready to pay"
 - Color preference filter: if user specifies a color (e.g. "silver"), non-matching products are capped at 25/135
 - Formality mismatch: ethnic wear (kurti, kurta, salwar) scores 0 for formal/interview occasions
 - Gender mismatch: women's products score 0 for men intent and vice versa
+
+### Live Agent Reasoning Panel
+
+A consumer-facing sidebar that visualises the 8-agent pipeline in real time. Implemented as a tab switcher (Chats | ✦ Agents) inside the left sidebar of the chat interface.
+
+**SSE event:** The backend yields `agent_step` events interleaved with token events:
+```json
+{ "type": "agent_step", "agent": "compare", "status": "running" }
+{ "type": "agent_step", "agent": "compare", "status": "complete", "data": { "total_candidates": 14, "finalists_count": 3, "ranked_products": [...] } }
+```
+
+**Agent step statuses:** `running` | `complete` | `skipped` | `waiting`
+
+**Frontend state:**
+- `agentSteps: AgentStep[]` — stored in `ChatState`, reset on every new user message via `RESET_PIPELINE` action
+- `pipelineStartTime / pipelineEndTime` — used for the "Completed in X.Xs" footer
+- Auto-switches sidebar to Agents tab when `agentSteps.length > 0`
+
+**AgentPanel.tsx** — 8 cards rendered in canonical order:
+- `waiting`: dashed border, 30% opacity
+- `running`: violet glowing border, pulsing spinner
+- `complete`: expanded content specific to each agent type
+- `skipped`: single slim row, 40% opacity, no content
+
+**Intent-aware pipeline events:**
+
+| Intent type | Active agents | Skipped agents |
+|---|---|---|
+| shopping (single_product, gift_finder, etc.) | intent → search → fetch → compare → explain → tradeoff | cart, checkout |
+| cart_add | intent, cart | search, fetch, compare, explain, tradeoff, checkout |
+| checkout_request | intent, checkout | search, fetch, compare, explain, tradeoff, cart |
+| needs_clarification | intent | all others |
+| greeting / general_chat | none | panel stays idle |
+
+**Key files:**
+- `backend/app/services/orchestrator_service.py` — `_agent_step()` helper + yields throughout pipeline
+- `frontend/components/chat/AgentPanel.tsx` — 8-card panel component with Framer Motion animations
+- `frontend/hooks/use-chat.ts` — `RESET_PIPELINE`, `AGENT_STEP`, `PIPELINE_COMPLETE` reducer cases
+- `frontend/types/index.ts` — `AgentName`, `AgentStatus`, `AgentStep`, `AgentStepData` types
 
 ### Visual Tradeoff Matrix (Tradeoff Agent)
 
@@ -615,31 +655,71 @@ Extracted synchronously after each assistant response using regex + keyword matc
 ## Environment Variables
 
 ### `backend/.env`
+
 ```env
-# Azure OpenAI
-AZURE_OPENAI_API_KEY=your_key
+# ── Azure OpenAI ──────────────────────────────────────────────────────────────
+AZURE_OPENAI_API_KEY=your_azure_openai_api_key
 AZURE_OPENAI_ENDPOINT=https://your-resource.cognitiveservices.azure.com/
 AZURE_OPENAI_API_VERSION=2024-12-01-preview
 AZURE_OPENAI_MODEL=gpt-4o
 
-# Ollama (vision)
+# ── Ollama (vision model) ──────────────────────────────────────────────────────
 OLLAMA_BASE_URL=http://host.docker.internal:11434
 OLLAMA_VISION_MODEL=llama3.2-vision:latest
 
-# Shopify — Admin API (product fetch)
-SHOPIFY_STORE_URL=your-store.myshopify.com
-SHOPIFY_ACCESS_TOKEN=shpat_your_admin_token
+# ── Multi-Merchant Shopify Configuration ──────────────────────────────────────
+# Each store requires 4 variables: STORE_URL, ACCESS_TOKEN (Admin API), STOREFRONT_TOKEN, MERCHANT_NAME
+# STORE_URL        — domain only, e.g. your-store.myshopify.com
+# ACCESS_TOKEN     — shpat_... Admin API token → used for product fetch (GraphQL Admin API)
+# STOREFRONT_TOKEN — public storefront token → used for cartCreate / checkout (Storefront API)
+# MERCHANT_NAME    — display name shown in product badges and checkout buttons
 
-# Shopify — Storefront API (cartCreate / checkout)
-SHOPIFY_STOREFRONT_TOKEN=your_storefront_token
+# Shopify Store 1 (e.g. Nova)
+SHOPIFY_STORE_URL_1=your-store-1.myshopify.com
+SHOPIFY_ACCESS_TOKEN_1=shpat_your_admin_api_token_1
+SHOPIFY_STOREFRONT_TOKEN_1=your_storefront_token_1
+SHOPIFY_MERCHANT_NAME_1=Nova
 
-# Server
+# Shopify Store 2 (e.g. Indie)
+SHOPIFY_STORE_URL_2=your-store-2.myshopify.com
+SHOPIFY_ACCESS_TOKEN_2=shpat_your_admin_api_token_2
+SHOPIFY_STOREFRONT_TOKEN_2=your_storefront_token_2
+SHOPIFY_MERCHANT_NAME_2=Indie
+
+# Shopify Store 3 (optional — leave SHOPIFY_STORE_URL_3 blank to disable)
+SHOPIFY_STORE_URL_3=
+SHOPIFY_ACCESS_TOKEN_3=
+SHOPIFY_STOREFRONT_TOKEN_3=
+SHOPIFY_MERCHANT_NAME_3=
+
+# ── Server ────────────────────────────────────────────────────────────────────
 HOST=0.0.0.0
 PORT=8000
 DEBUG=True
 ```
 
+**Variable reference:**
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `AZURE_OPENAI_API_KEY` | Yes | Azure OpenAI API key |
+| `AZURE_OPENAI_ENDPOINT` | Yes | Azure OpenAI resource endpoint URL |
+| `AZURE_OPENAI_API_VERSION` | Yes | API version (e.g. `2024-12-01-preview`) |
+| `AZURE_OPENAI_MODEL` | Yes | Deployment name (e.g. `gpt-4o`) |
+| `OLLAMA_BASE_URL` | Yes | Ollama server URL (use `host.docker.internal:11434` in Docker) |
+| `OLLAMA_VISION_MODEL` | Yes | Vision model name (e.g. `llama3.2-vision:latest`) |
+| `SHOPIFY_STORE_URL_N` | Yes (≥1) | Shopify store domain — `your-store.myshopify.com` |
+| `SHOPIFY_ACCESS_TOKEN_N` | Yes (≥1) | Admin API token (`shpat_...`) — used for product fetch |
+| `SHOPIFY_STOREFRONT_TOKEN_N` | Yes (≥1) | Storefront API token — used for `cartCreate` and checkout URLs |
+| `SHOPIFY_MERCHANT_NAME_N` | Yes (≥1) | Display name shown in product cards and checkout buttons |
+| `HOST` | No | Server bind host (default `0.0.0.0`) |
+| `PORT` | No | Server port (default `8000`) |
+| `DEBUG` | No | Enable FastAPI debug mode (default `True`) |
+
+At least one store (`_1`) must be configured. Stores `_2` and `_3` are optional — any store with a blank `SHOPIFY_STORE_URL_N` is skipped automatically.
+
 ### `frontend/.env.local`
+
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```

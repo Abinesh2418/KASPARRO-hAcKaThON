@@ -43,9 +43,9 @@ Behind every recommendation is an 8-step reasoning pipeline:
 4. **Compare & Rank Agent** — Scores products across occasion fit, style match, budget fit, and category relevance (0–100 scale, threshold 35)
 5. **Explain Agent** — Generates stylist-quality reasoning for each pick
 6. **Response** — Streams the final conversational answer to the user
-7. **Tradeoff Agent** — Runs after the response for single-product queries; scores top 3 picks across 7 dimensions and generates Best Fit / Best Value comparison panels
+7. **Tradeoff Agent** — Scores top 3 picks across 7 dimensions and generates Best Fit / Best Value comparison panels
 
-This is not keyword matching — it is multi-step reasoning on live inventory.
+This is not keyword matching — it is multi-step reasoning on live inventory, made fully transparent to the user.
 
 ### Feature 3 — Explainable Picks
 
@@ -58,7 +58,7 @@ The AI never recommends without explaining why.
 
 ### Feature 4 — Real-Time Streaming Responses
 
-Curio's replies appear word-by-word as the AI generates them — instant feedback, not a loading spinner. The experience feels live, not like waiting for a server.
+Curio's replies appear word-by-word as the AI generates them — instant feedback, not a loading spinner. The experience feels live, not like waiting for a server.   
 
 ### Feature 5 — Inline Product Recommendations
 
@@ -105,9 +105,28 @@ Curio supports products from multiple Shopify merchants in a single conversation
 - Presents numbered checkout buttons ("Step 1 of 2 — Checkout with Veda")
 - Gently warns users when adding items from a different store than what's already in their cart
 
-### Feature 12 — Photo Upload with Preview
+### Feature 12 — Live Agent Reasoning Panel
 
-Users upload a photo in the chat input bar. A thumbnail preview appears before submission, and a loading indicator is shown while the AI analyzes the image.
+Every time the user sends a shopping query, a real-time panel in the sidebar wakes up and walks through all 8 agent steps as they execute — not as a developer log, but as a consumer-facing visualisation.
+
+The panel answers the question every user silently asks when an AI takes 4–5 seconds to respond: *"What is it actually doing right now?"*
+
+**Panel layout:** Two tabs in the sidebar — **Chats** (history) and **✦ Agents** (live pipeline). The tab auto-switches to Agents as soon as the pipeline starts.
+
+**What each card shows when complete:**
+
+| Agent | Card Content |
+|---|---|
+| 🎯 Intent | Intent type badge + entity rows (occasion, category, color, budget, gender, recipient, confidence %) |
+| 🔍 Search | 3 query pills — primary (violet border), variant (muted), fallback (dashed) |
+| 🏪 Fetch | Merchant rows with product counts, total unique products found |
+| ⚖ Compare | Animated score bars for all candidates — top 3 highlighted, rest faded — "N → 3 finalists" |
+| ✍ Explain | Rationale quote cards per product with decorative " mark |
+| ⚡ Tradeoff | Best Fit and Best Value panel highlights |
+| 🛒 Cart | Active for cart_add intent — shows product, size, stock, merchant |
+| 💳 Checkout | Active for checkout intent — shows merchant groups, subtotals, checkout URL status |
+
+**Intent-aware behaviour:** For cart/checkout intents, pipeline steps that don't apply show as slim "skipped" rows. For greetings and general chat, the panel stays idle. A completed footer shows "Completed in X.Xs · 8 agents".
 
 ### Feature 13 — Visual Tradeoff Matrix
 
