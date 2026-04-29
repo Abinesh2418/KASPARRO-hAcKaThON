@@ -26,6 +26,13 @@ from app.core.prompts.orchestrator import FINAL_RESPONSE_PROMPT
 logger = logging.getLogger(__name__)
 
 
+def _agent_step(agent: str, status: str, data: dict | None = None) -> dict:
+    event: dict = {"type": "agent_step", "agent": agent, "status": status}
+    if data:
+        event["data"] = data
+    return event
+
+
 # ── Agent callers ────────────────────────────────────────────────────────────
 
 async def _run_intent_agent(user_message: str, history: list[dict]) -> dict:
@@ -266,6 +273,10 @@ async def _handle_checkout(
     for char in msg:
         yield {"type": "token", "content": char}
 
+    yield _agent_step("checkout", "complete", {
+        "checkout_merchants": [{"name": c["merchant_name"], "item_count": c["item_count"], "subtotal": c["subtotal"]} for c in checkouts],
+        "grand_total": grand_total,
+    })
     yield {
         "type": "metadata",
         "preferences": preferences,
@@ -320,6 +331,7 @@ async def run_pipeline(
     try:
         # ── Step 1: Intent ───────────────────────────────────────────────────
         print(f"[ORCHESTRATOR] Step 1/6 -> Intent Agent")
+        yield _agent_step("intent", "running")
         intent = await _run_intent_agent(user_message, history)
 
         if not intent:
@@ -328,9 +340,26 @@ async def run_pipeline(
         intent_type = intent.get("intent_type") or intent.get("intent", "single_product")
         print(f"[ORCHESTRATOR] Intent type: {intent_type}")
 
+        yield _agent_step("intent", "complete", {
+            "intent_type": intent_type,
+            "occasion": intent.get("occasion"),
+            "budget_max": intent.get("budget_max"),
+            "budget_min": intent.get("budget_min"),
+            "product_category": intent.get("product_category"),
+            "constraints": intent.get("constraints", []),
+            "preferences": intent.get("preferences", []),
+            "gender": intent.get("gender"),
+            "recipient": intent.get("recipient"),
+            "recipient_description": intent.get("recipient_description"),
+            "confidence": intent.get("confidence", 1.0),
+        })
+
         # ── Checkout ─────────────────────────────────────────────────────────
         if intent_type == "checkout_request":
             print(f"[ORCHESTRATOR] Checkout intent -> running checkout agent")
+            for a in ["search", "fetch", "compare", "explain", "tradeoff", "cart"]:
+                yield _agent_step(a, "skipped")
+            yield _agent_step("checkout", "running")
             async for event in _handle_checkout(user_message, username, preferences, history):
                 yield event
             return
@@ -400,6 +429,8 @@ async def run_pipeline(
 
         # ── Cart add intent ──────────────────────────────────────────────────
         if intent_type == "cart_add":
+            for a in ["search", "fetch", "compare", "explain", "tradeoff"]:
+                yield _agent_step(a, "skipped")
             print(f"[ORCHESTRATOR] Cart add intent -> fetching last recommended products")
             last_products = preference_service.get_last_products(session_id)
             if not last_products:
@@ -455,6 +486,10 @@ async def run_pipeline(
                 all_to_add = last_products
                 print(f"[ORCHESTRATOR] No specific items requested -> adding all: {[p.title for p in all_to_add]}")
 
+            yield _agent_step("cart", "complete", {
+                "added": [{"title": p.title, "price": p.price, "merchant": getattr(p, "merchant_name", None) or "Store"} for p in all_to_add],
+            })
+            yield _agent_step("checkout", "skipped")
             names = " + ".join(f"**{p.title}**" for p in all_to_add)
             msg = f"Adding {names} to your bag! Head to the Cart page to review your items."
             for char in msg:
@@ -472,6 +507,8 @@ async def run_pipeline(
         if intent.get("needs_clarification") and intent.get("clarification_question"):
             question = intent["clarification_question"]
             print(f"[ORCHESTRATOR] Needs clarification -> asking: '{question}'")
+            for a in ["search", "fetch", "compare", "explain", "tradeoff", "cart", "checkout"]:
+                yield _agent_step(a, "skipped")
             for char in question:
                 yield {"type": "token", "content": char}
             yield {"type": "metadata", "preferences": preferences, "products": []}
@@ -482,14 +519,23 @@ async def run_pipeline(
         if pre_searched_products:
             from app.schemas.product import Product
             print(f"[ORCHESTRATOR] Visual search products provided -> skipping search agents ({len(pre_searched_products)} products)")
+            yield _agent_step("search", "skipped")
             raw_products = [Product(**p) for p in pre_searched_products]
+            _vs_counts: dict[str, int] = {}
+            for _vp in raw_products:
+                _vm = getattr(_vp, "merchant_name", None) or "Store"
+                _vs_counts[_vm] = _vs_counts.get(_vm, 0) + 1
+            yield _agent_step("fetch", "complete", {
+                "total": len(raw_products),
+                "merchants": [{"name": k, "count": v} for k, v in _vs_counts.items()],
+            })
         else:
             print(f"[ORCHESTRATOR] Step 2/6 -> Search Agent")
+            yield _agent_step("search", "running")
             search_result = await _run_search_agent(intent)
 
             routine_queries = search_result.get("routine_queries")
             if routine_queries and isinstance(routine_queries, list):
-                # routine_builder: flatten all step-queries
                 queries = []
                 for rq in routine_queries:
                     if isinstance(rq, str):
@@ -505,11 +551,28 @@ async def run_pipeline(
                 if search_result.get("fallback_query"):
                     queries.append(search_result["fallback_query"])
             print(f"[ORCHESTRATOR] Search queries built: {queries}")
+            yield _agent_step("search", "complete", {
+                "primary_query": search_result.get("primary_query"),
+                "query_variants": search_result.get("query_variants", [])[:2],
+                "fallback_query": search_result.get("fallback_query"),
+            })
 
             print(f"[ORCHESTRATOR] Step 3/6 -> Shopify Product Search")
+            yield _agent_step("fetch", "running")
             raw_products = shopify_service.search_products(queries, limit=10)
+            _merchant_counts: dict[str, int] = {}
+            for _p in raw_products:
+                _m = getattr(_p, "merchant_name", None) or "Store"
+                _merchant_counts[_m] = _merchant_counts.get(_m, 0) + 1
+            yield _agent_step("fetch", "complete", {
+                "total": len(raw_products),
+                "merchants": [{"name": k, "count": v} for k, v in _merchant_counts.items()],
+            })
+
         print(f"[ORCHESTRATOR] Products found: {len(raw_products)} | Titles: {[p.title for p in raw_products[:4]]}")
         if not raw_products:
+            for a in ["compare", "explain", "tradeoff", "cart", "checkout"]:
+                yield _agent_step(a, "skipped")
             no_match_msg = (
                 f"I couldn't find any products matching your request in our current catalog. "
                 f"Could you try describing the style differently, or would you like to see what's available?"
@@ -523,6 +586,7 @@ async def run_pipeline(
 
         # ── Step 4: Compare & rank ───────────────────────────────────────────
         print(f"[ORCHESTRATOR] Step 4/6 -> Compare & Rank Agent")
+        yield _agent_step("compare", "running")
         compare_result = await _run_compare_agent(raw_products, intent)
 
         ranked_ids = [
@@ -533,6 +597,20 @@ async def run_pipeline(
         product_map = {p.id: p for p in raw_products}
         ranked_products = [product_map[pid] for pid in ranked_ids if pid in product_map]
         print(f"[ORCHESTRATOR] Ranked products (score>=35): {[p.title for p in ranked_products[:3]]}")
+        _title_map = {p.id: p.title for p in raw_products}
+        yield _agent_step("compare", "complete", {
+            "total_candidates": len(raw_products),
+            "finalists_count": len(ranked_products),
+            "ranked_products": [
+                {
+                    "id": p["product_id"],
+                    "title": p.get("title") or _title_map.get(p["product_id"], p["product_id"]),
+                    "score": p.get("score", 0),
+                    "selected": p.get("score", 0) >= 35,
+                }
+                for p in compare_result.get("ranked_products", [])[:8]
+            ],
+        })
 
         force_recommend = False
         if not ranked_products:
@@ -549,7 +627,18 @@ async def run_pipeline(
 
         # ── Step 5: Explain ──────────────────────────────────────────────────
         print(f"[ORCHESTRATOR] Step 5/6 -> Explain Agent")
+        yield _agent_step("explain", "running")
         explain_result = await _run_explain_agent(compare_result, intent, raw_products[:6])
+        yield _agent_step("explain", "complete", {
+            "explanations": [
+                {
+                    "product_id": e.get("product_id"),
+                    "title": _title_map.get(e.get("product_id", ""), e.get("product_id", "")),
+                    "rationale": e.get("why_recommended", "")[:120],
+                }
+                for e in explain_result.get("explanations", [])
+            ],
+        })
 
         # ── Step 6: Stream final response ────────────────────────────────────
         print(f"[ORCHESTRATOR] Step 6/6 -> Streaming Final Response")
@@ -599,6 +688,7 @@ async def run_pipeline(
 
         # Run tradeoff agent only for single-product comparison (not routines/outfits)
         if not force_recommend and products_to_return and intent_type == "single_product":
+            yield _agent_step("tradeoff", "running")
             try:
                 tradeoff_result = await _run_tradeoff_agent(products_to_return[:3], intent)
                 scored_products = tradeoff_result.get("scored_products", [])
@@ -607,9 +697,18 @@ async def run_pipeline(
                     metadata_event["scored_products"] = scored_products
                 if tradeoff_panels:
                     metadata_event["tradeoff_panels"] = tradeoff_panels
+                yield _agent_step("tradeoff", "complete", {
+                    "panels": tradeoff_panels,
+                })
                 print(f"[ORCHESTRATOR] Tradeoff matrix attached: {len(scored_products)} scored, {len(tradeoff_panels)} panels")
             except Exception as te:
                 logger.warning(f"[ORCHESTRATOR] Tradeoff agent failed (non-critical): {te}")
+                yield _agent_step("tradeoff", "skipped")
+        else:
+            yield _agent_step("tradeoff", "skipped")
+
+        yield _agent_step("cart", "skipped")
+        yield _agent_step("checkout", "skipped")
 
         yield metadata_event
         yield {"type": "done"}
