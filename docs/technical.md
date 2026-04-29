@@ -89,8 +89,9 @@ kasparo/
 │   │           ├── orchestrator.py       # ORCHESTRATOR_PROMPT, FINAL_RESPONSE_PROMPT
 │   │           ├── intent_agent.py       # 11-intent classifier + entity extraction
 │   │           ├── search_agent.py       # Search query generation
-│   │           ├── compare_agent.py      # Product scoring + ranking
+│   │           ├── compare_agent.py      # Product scoring + ranking (0–100, threshold 35)
 │   │           ├── explain_agent.py      # Styling rationale generation
+│   │           ├── tradeoff_agent.py     # Visual tradeoff scoring (0–135, 7 dimensions)
 │   │           ├── cart_agent.py         # Cart add — variant picking, merchant grouping
 │   │           └── checkout_agent.py     # Checkout — cart validation, cartCreate payload
 │   ├── db/
@@ -115,7 +116,8 @@ kasparo/
 │   │   ├── chat/
 │   │   │   ├── ChatInterface.tsx        # Main chat shell
 │   │   │   ├── MessageList.tsx
-│   │   │   ├── MessageBubble.tsx        # Message + inline checkout card
+│   │   │   ├── MessageBubble.tsx        # Message + inline checkout card + tradeoff matrix
+│   │   │   ├── TradeoffMatrix.tsx       # 7-dimension score table + Best Fit / Best Value panels
 │   │   │   ├── ChatInput.tsx            # Text + image upload input
 │   │   │   └── TypingIndicator.tsx
 │   │   ├── products/
@@ -149,7 +151,7 @@ kasparo/
 
 ### Shopping Pipeline (product discovery)
 
-Runs on every shopping-related message. 6 steps.
+Runs on every shopping-related message. 7 steps.
 
 ```
 User Message
@@ -161,16 +163,19 @@ User Message
 2. Search Agent          — generates primary + variant + fallback Shopify search queries
      │
      ▼
-3. Shopify Fetch         — fetches live candidate products via Admin GraphQL API
+3. Shopify Fetch         — fetches live candidate products across ALL configured stores in parallel
      │
      ▼
-4. Compare & Rank Agent  — scores each product 0–100, filters below 35, returns top 3
+4. Compare & Rank Agent  — scores each product 0–100 across 4 dimensions, filters below 35, returns top 3
      │
      ▼
 5. Explain Agent         — generates stylist-quality rationale for each recommendation
      │
      ▼
 6. Stream Response       — Azure OpenAI streams the conversational final answer token-by-token
+     │
+     ▼
+7. Tradeoff Agent        — scores top 3 products across 7 dimensions (0–135), generates Best Fit / Best Value panels (single_product only)
 ```
 
 ### Checkout Pipeline
@@ -222,7 +227,35 @@ User: "I'm done / checkout / ready to pay"
 
 **Minimum threshold:** Products scoring below 35/100 are excluded. If all candidates fail, the pipeline returns empty with an explanation rather than surfacing poor matches.
 
-**Hard constraints:** Explicit color rejection, wrong size, or material rejection → instant score of 0.
+**Hard constraints:**
+- Explicit color rejection, wrong size, or material rejection → instant score of 0
+- Color preference filter: if user specifies a color (e.g. "silver"), non-matching products are capped at 25/135
+- Formality mismatch: ethnic wear (kurti, kurta, salwar) scores 0 for formal/interview occasions
+- Gender mismatch: women's products score 0 for men intent and vice versa
+
+### Visual Tradeoff Matrix (Tradeoff Agent)
+
+Runs after the main pipeline for `single_product` intent only. Non-blocking — a failure does not affect the main recommendation.
+
+Scores the top 3 ranked products across **7 dimensions** (max 135 total):
+
+| Dimension | Max | Description |
+|---|---|---|
+| Occasion fit | 30 | How well it suits the stated occasion |
+| Style match | 25 | Alignment with style preferences |
+| Budget fit | 25 | Price vs. budget (25 = within, 0 = way over) |
+| Category match | 20 | Correct product type |
+| Color match | 15 | Color suitability for occasion/preference |
+| Stock availability | 10 | Default 10 unless clearly limited |
+| Value score | 10 | Price-to-quality ratio vs. other options |
+
+Generates two tradeoff panels:
+- **Best Value** — highest (value_score + budget_fit), with 12-word highlight and 10-word tradeoff
+- **Best Fit** — highest (occasion_fit + style_match), same format
+
+Quick-reply buttons: `Add to cart`, `Find cheaper options`, `Show similar styles`
+
+The frontend renders this as an animated score bar table (emerald → amber → red gradient based on percentage) followed by the two panel cards with contextual add-to-cart labels.
 
 ### Fallback Behavior
 
@@ -356,6 +389,39 @@ Authenticates a user against the file-based user store.
 
 Cart read, add, and remove operations. Cart items are scoped to the logged-in user.
 
+---
+
+### `GET /api/v1/cart/checkout?username={username}`
+
+Groups cart items by merchant, calls Shopify `cartCreate` for each store, and returns per-merchant checkout URLs.
+
+**Response:**
+```json
+{
+  "checkouts": [
+    {
+      "step": 1,
+      "merchant_name": "Nova",
+      "merchant_url": "kasparro-curio-nova.myshopify.com",
+      "checkout_url": "https://kasparro-curio-nova.myshopify.com/checkouts/cn/...",
+      "subtotal": 1499.0,
+      "item_count": 1
+    },
+    {
+      "step": 2,
+      "merchant_name": "Indie",
+      "merchant_url": "kasparro-curio-indie.myshopify.com",
+      "checkout_url": "https://kasparro-curio-indie.myshopify.com/checkouts/cn/...",
+      "subtotal": 1299.0,
+      "item_count": 1
+    }
+  ],
+  "grand_total": 2798.0,
+  "total_items": 2,
+  "is_multi_merchant": true
+}
+```
+
 **Cart item schema:**
 ```json
 {
@@ -391,7 +457,7 @@ Cart read, add, and remove operations. Cart items are scoped to the logged-in us
 ### Product
 ```typescript
 interface Product {
-  id: string;
+  id: string;            // "{merchant_slug}_{shopify_numeric_id}" — unique across stores
   title: string;
   price: number;
   compare_at_price?: number;
@@ -404,6 +470,10 @@ interface Product {
   description: string;
   rating: number;
   reviews_count: number;
+  variant_id?: string;   // default variant GID for cartCreate
+  variants?: Array<{ id: string; size: string | null; price: number }>;
+  merchant_name?: string; // e.g. "Nova", "Indie", "Kasparro"
+  merchant_url?: string;  // e.g. "kasparro-curio-nova.myshopify.com"
 }
 ```
 
@@ -450,15 +520,30 @@ type SSEEvent =
 
 ---
 
-## Shopify Integration
+## Shopify Integration — Multi-Merchant
 
-### Product Fetch (Admin API)
+### Configuration
 
-Products are fetched via the Shopify Admin GraphQL API (`/admin/api/2026-04/graphql.json`) using `X-Shopify-Access-Token`. Results are cached in-process. Falls back to the 20-item mock catalog if the API is unavailable.
+Up to 3 Shopify stores are supported. Each store needs three credentials in `.env`:
 
-### Checkout (Storefront API)
+```
+SHOPIFY_STORE_URL_N      # domain only: kasparro-curio-nova.myshopify.com
+SHOPIFY_ACCESS_TOKEN_N   # Admin API token (shpat_...) — product fetch
+SHOPIFY_STOREFRONT_TOKEN_N  # Storefront API token — cart/checkout
+SHOPIFY_MERCHANT_NAME_N  # display name: Nova, Indie, Kasparro
+```
 
-When a user triggers checkout, the backend calls Shopify's Storefront `cartCreate` mutation per merchant group (`/api/2024-10/graphql.json`) using `X-Shopify-Storefront-Access-Token`. Returns a real `checkoutUrl` that opens the Shopify-hosted checkout page.
+### Product Fetch (Admin API — parallel fan-out)
+
+On first request, `shopify_service` fetches products from **all configured stores simultaneously** using `ThreadPoolExecutor`. Results are merged into a single in-process catalog cache. Each product is tagged with `merchant_name` and `merchant_url`.
+
+Product IDs are namespaced as `{merchant_slug}_{shopify_numeric_id}` (e.g. `nova_8123456`) to guarantee uniqueness across stores.
+
+Falls back to the 20-item mock catalog only if **all** stores fail.
+
+### Checkout (Storefront API — per-merchant cartCreate)
+
+When a user triggers checkout, cart items are grouped by `merchant_url`. For each merchant group, the backend calls Shopify's Storefront `cartCreate` mutation separately using that merchant's storefront token.
 
 ```graphql
 mutation cartCreate($input: CartInput!) {
@@ -472,7 +557,17 @@ mutation cartCreate($input: CartInput!) {
 }
 ```
 
-If `SHOPIFY_STOREFRONT_TOKEN` is not configured or cartCreate fails, the backend falls back to a direct store cart URL (`https://{merchant_url}/cart`).
+The result is an array of merchant checkouts, each with its own `checkout_url`. The frontend displays one checkout button per merchant.
+
+If `cartCreate` fails for any store, the backend falls back to a direct store cart URL (`https://{merchant_url}/cart`).
+
+### Multi-Merchant Cart UX
+
+- Product cards show a **merchant badge** (e.g. "Nova") below the title
+- When products from multiple stores are added, the cart page groups items under merchant section headers
+- Each merchant section has its own **Checkout** button that opens the real Shopify checkout in a new tab
+- A multi-store info banner warns the user that separate checkouts are required
+- The Curio chat checkout flow (saying "checkout" or "I'm done") also creates per-merchant checkout buttons inline in the conversation
 
 ---
 

@@ -10,12 +10,13 @@ Built for the **Kasparro Agentic Commerce Hackathon (Track 1)** · April 2026
 
 A full-stack AI shopping platform with:
 
-- **Curio AI Chat** — Conversational shopping assistant powered by an agent pipeline (Azure OpenAI GPT-4o). Ask in plain language, get curated product recommendations with stylist-quality reasoning.
+- **Curio AI Chat** — Conversational shopping assistant powered by a 7-agent pipeline (Azure OpenAI GPT-4o). Ask in plain language, get curated product recommendations with stylist-quality reasoning.
+- **Visual Tradeoff Matrix** — After every recommendation, an animated score breakdown renders in chat — 7 dimensions, Best Fit vs Best Value panels, contextual quick-reply buttons.
+- **Multi-Merchant Store** — Products from multiple Shopify stores (Nova + Indie) are fetched in parallel, compared on the same scale, and checked out separately per merchant.
 - **Visual Search** — Upload any outfit photo and the AI (Ollama vision) extracts style attributes and finds similar products from the live Shopify catalog.
 - **Live Style Profile** — Preferences (style, colors, budget, occasions, size) are learned automatically from the conversation and displayed in real-time.
 - **Cart Management** — Add products directly from the conversation using natural language ("add the first one in M", "add both").
 - **Conversational Checkout** — Say "I'm done" or "checkout" and Curio shows an inline cart summary with real Shopify checkout URLs generated via `cartCreate`.
-- **Multi-Merchant Checkout** — Items from multiple Shopify stores are grouped and presented with a separate checkout button per merchant.
 - **User Auth** — Simple login with session-scoped cart and preferences.
 - **Indian Market Context** — Native ₹ budgets, Indian occasions, Indian fashion categories, and Hinglish understanding.
 
@@ -24,7 +25,7 @@ A full-stack AI shopping platform with:
 ## How It Works
 
 1. **Chat** — Tell Curio what you're looking for in plain language
-2. **Agent pipeline** — Intent (11 types) → Search → Fetch → Compare → Explain → Respond
+2. **Agent pipeline** — Intent (11 types) → Search → Fetch → Compare → Explain → Respond → Tradeoff Matrix
 3. **Get recommendations** — Products appear inline in the conversation, matched and ranked by occasion fit, style, and budget
 4. **Upload a photo** — Visual AI extracts the style and finds similar items
 5. **Watch your style profile build** — Preferences update in real-time as you chat
@@ -147,7 +148,7 @@ kasparo/
 │   │   ├── api/v1/          # chat, products, visual-search, preferences, auth, cart, health
 │   │   ├── services/        # orchestrator, llm, azure, ollama, shopify, cart, product, preference
 │   │   ├── schemas/         # Pydantic models
-│   │   └── core/            # config, middleware, prompts (7 agent prompts incl. checkout)
+│   │   └── core/            # config, middleware, prompts (7 agent prompts incl. tradeoff + checkout)
 │   ├── db/users.json        # File-based user store
 │   ├── Dockerfile
 │   └── .env.example
@@ -192,7 +193,7 @@ kasparo/
 
 ---
 
-## Team
+## Team — Duo Dominators
 
 | Role | Person |
 |---|---|

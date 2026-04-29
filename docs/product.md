@@ -35,14 +35,15 @@ Curio asks smart follow-up questions (budget → occasion → style) one at a ti
 
 ### Feature 2 — Multi-Agent AI Reasoning Pipeline
 
-Behind every recommendation is a 6-step reasoning pipeline:
+Behind every recommendation is an 8-step reasoning pipeline:
 
 1. **Intent Agent** — Classifies what the user wants (11 intent types: shopping, cart, checkout, refinement, gift, comparison, and more)
 2. **Search Agent** — Generates optimized search queries from intent
-3. **Product Fetch** — Pulls live candidates from the Shopify catalog
-4. **Compare & Rank Agent** — Scores products across occasion fit, style match, budget fit, and category relevance
+3. **Product Fetch** — Pulls live candidates from ALL configured Shopify stores in parallel
+4. **Compare & Rank Agent** — Scores products across occasion fit, style match, budget fit, and category relevance (0–100 scale, threshold 35)
 5. **Explain Agent** — Generates stylist-quality reasoning for each pick
 6. **Response** — Streams the final conversational answer to the user
+7. **Tradeoff Agent** — Runs after the response for single-product queries; scores top 3 picks across 7 dimensions and generates Best Fit / Best Value comparison panels
 
 This is not keyword matching — it is multi-step reasoning on live inventory.
 
@@ -108,6 +109,17 @@ Curio supports products from multiple Shopify merchants in a single conversation
 
 Users upload a photo in the chat input bar. A thumbnail preview appears before submission, and a loading indicator is shown while the AI analyzes the image.
 
+### Feature 13 — Visual Tradeoff Matrix
+
+After every single-product recommendation, Curio renders a live **Visual Tradeoff Matrix** directly inside the chat. It shows:
+
+- An animated score breakdown table for the top 3 picks across 7 dimensions (occasion fit, style match, budget fit, category, color, availability, value)
+- Two summary panels — **Best Fit** (highest occasion + style score) and **Best Value** (highest value + budget score)
+- Quick-reply buttons in each panel: "Add to cart", "Find cheaper options", "Show similar styles"
+- Contextual cart labels — e.g. "Add Best Value — Minimalist Silver Mesh Watch"
+
+Score bars animate from 0 on load with emerald → amber → red gradient based on percentage. Total out of 135 shown with colored accents per rank.
+
 ---
 
 ## Value Proposition
@@ -122,6 +134,8 @@ Users upload a photo in the chat input bar. A thumbnail preview appears before s
 | US-centric defaults | Native ₹ budgets, Indian occasions, Indian categories |
 | No memory between sessions | Style profile builds across the conversation |
 | Manual cart + checkout flow | Add to cart and checkout from the conversation |
+| Single-store only | Multi-merchant: discover and buy from multiple Shopify stores in one chat |
+| Hidden scoring criteria | Visual Tradeoff Matrix shows why each product ranks where it does |
 
 ---
 
