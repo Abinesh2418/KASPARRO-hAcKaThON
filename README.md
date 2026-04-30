@@ -8,7 +8,7 @@ Built for the **Kasparro Agentic Commerce Hackathon (Track 1)** · April 2026
 
 ## Demo
 
-[Watch the demo (Google Drive, 5 min)](https://drive.google.com/file/d/1QyGGAnONiTyw-UYIpHnHRgtJyfJ1cTRF/view?usp=sharing)
+[Watch the demo (Google Drive)](https://drive.google.com/file/d/1QyGGAnONiTyw-UYIpHnHRgtJyfJ1cTRF/view?usp=sharing)
 
 ---
 
