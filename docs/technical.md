@@ -1,8 +1,8 @@
-# Kasparro — Technical Documentation
+# Curio — Technical Documentation
 
 ## Architecture Overview
 
-Kasparro is a full-stack web application split into two independently deployable services: a Python/FastAPI backend and a Next.js frontend.
+Curio platform is a full-stack AI based web application split into two independently deployable services: a Python/FastAPI backend and a Next.js frontend.
 
 ```
 Browser
@@ -726,6 +726,66 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 ---
 
+## What the AI Does vs What the Code Does
+
+Not everything in the pipeline is handled by the LLM. We drew a clear line between what requires language understanding and what needs to be fast, consistent, and predictable.
+
+**The LLM is responsible for:**
+- Understanding what the user actually wants — classifying intent across 11 types
+- Generating smart search queries from that intent
+- Writing stylist-quality reasoning for each product recommendation
+- Scoring the top 3 products across 7 dimensions for the tradeoff matrix
+- Producing the final conversational reply streamed to the user
+
+**The code is responsible for:**
+- The product scoring formula — weighted math (occasion 30pts, style 25pts, budget 25pts, category 20pts)
+- Hard exclusions — a women's product for a men's query scores 0 in code, not by LLM judgment
+- Cutting out weak matches — anything scoring below 35/100 never reaches the LLM
+- Extracting preferences — regex and keyword matching, no extra LLM call needed
+- Grouping cart items by merchant and generating Shopify checkout URLs
+
+The rule of thumb we followed: if it needs to be consistent or auditable, it lives in code. The LLM handles only what genuinely requires understanding language or generating natural text.
+
+---
+
+## Failure Handling
+
+Every part of the pipeline has a fallback so the user always gets a response, even when something breaks.
+
+| What breaks | What the user experiences |
+|---|---|
+| Shopify stores are unreachable | Recommendations still work using a built-in 20-product mock catalog |
+| LLM returns a malformed response | The agent retries once, then Curio falls back to a plain conversational reply |
+| The full pipeline crashes | Azure streaming chat takes over — the user sees a normal message, not an error screen |
+| Tradeoff agent fails | The main recommendation has already appeared — the score matrix just doesn't show up |
+| Shopify checkout URL fails to generate | Curio falls back to a direct store cart link so the user can still complete their purchase |
+| User sends something unexpected or off-topic | Intent agent classifies it as general chat — Curio responds conversationally and skips the product pipeline |
+| Ollama (vision model) is offline | Visual search shows an error — the rest of the app (chat, cart, checkout) keeps working normally |
+
+---
+
+## Known Limitations
+
+These are honest constraints we are aware of, mostly by design choices made to keep the project runnable and evaluatable within hackathon scope.
+
+| Limitation | What it means |
+|---|---|
+| Session data resets on server restart | Cart, preferences, and conversation state live in memory — restarting the server clears everything |
+| No history across sessions | Chat history is saved in the browser, but the backend forgets the session after a restart |
+| Ollama runs locally only | The vision model needs to run on the same machine — full cloud deployment requires switching to a hosted vision API |
+| Cannot scale horizontally | Multiple backend instances would each have their own memory — sessions would break across instances |
+| Basic authentication | Users are stored in a JSON file without password hashing or token expiry — not production-ready |
+| No payment handling | Curio hands the user off to Shopify's checkout page — it does not process payments or track orders |
+
+**What we would build next with more time:**
+- Swap the in-memory store for Redis so sessions survive restarts and the backend can scale
+- Replace file-based auth with proper JWT authentication
+- Move to a hosted vision API so the whole stack deploys to the cloud without needing a local machine
+- Add post-purchase conversation — order status, returns, reorder suggestions
+- Persist conversation history in a lightweight database so users can pick up where they left off
+
+---
+
 ## Running with Docker
 
 ```bash
@@ -754,3 +814,5 @@ cd frontend
 npm install
 npm run dev
 ```
+
+---

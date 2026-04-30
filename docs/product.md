@@ -2,8 +2,6 @@
 
 **Curio** is an AI-powered personal shopping assistant built for Indian fashion shoppers. Instead of scrolling through hundreds of listings, users describe what they want in plain language — and Curio finds the right products, explains its reasoning, and learns their taste with every message.
 
-Built for the **Kasparro Agentic Commerce Hackathon — Track 1**
-
 ---
 
 ## Problem It Solves
@@ -138,6 +136,38 @@ After every single-product recommendation, Curio renders a live **Visual Tradeof
 - Contextual cart labels — e.g. "Add Best Value — Minimalist Silver Mesh Watch"
 
 Score bars animate from 0 on load with emerald → amber → red gradient based on percentage. Total out of 135 shown with colored accents per rank.
+
+---
+
+## What We Chose Not to Build (Scope Decisions)
+
+| Out of Scope | Reason |
+|---|---|
+| Payment processing | Shopify handles checkout and payment — Curio generates the URL and hands off. Building our own payment flow would duplicate Shopify's core strength. |
+| Merchant-facing dashboard | The hackathon track is focused on the buyer experience. Merchant tooling is a separate product surface. |
+| Recommendation ML model | Training a fashion recommendation model requires labelled data we don't have. LLM reasoning over live inventory gives better cold-start results immediately. |
+| Persistent history across sessions | In-memory session state was a deliberate choice to keep the setup zero-infra for judges running locally. |
+| Mobile app | Web-first for the hackathon. The conversational UI works on mobile browser. |
+| Order tracking and post-purchase flow | Out of scope for this track — the agent's job ends at checkout handoff. |
+
+---
+
+## Tradeoffs We Encountered and How We Resolved Them
+
+**Speed vs reasoning depth**
+The 7-agent pipeline takes 4–5 seconds per query. We resolved this by building the Live Agent Reasoning Panel — every agent step animates in real time, so the latency becomes visible progress rather than an unexplained wait. Users see the AI earning its recommendation.
+
+**Single LLM call vs multi-agent pipeline**
+One large prompt would be faster but harder to debug and control. We chose a pipeline where each agent has a focused prompt and can fail independently without breaking the whole response. The orchestrator degrades gracefully to a plain chat reply if any step fails.
+
+**In-memory state vs a database**
+Persistence across server restarts vs zero infrastructure setup for anyone running the project locally. We chose in-memory because the hackathon evaluation requires judges to run the project, and eliminating a database dependency makes that frictionless.
+
+**Single store vs multi-merchant from day one**
+Multi-merchant adds complexity at every layer — parallel fetching, namespaced product IDs, per-merchant cart grouping, separate checkout URLs. We built it from the start rather than retrofitting it because the hackathon brief explicitly requires multi-merchant, and adding it later would have required touching every layer simultaneously.
+
+**Regex preference extraction vs a dedicated LLM call**
+Calling the LLM after every response to extract structured preferences would add latency and cost. We chose regex + keyword matching against a fixed vocabulary — it runs in under 1ms, is deterministic, and the vocabulary is narrow enough that fuzzy matching isn't needed.
 
 ---
 
