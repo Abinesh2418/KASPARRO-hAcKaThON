@@ -1,8 +1,8 @@
-# Kasparo — Technical Documentation
+# Kasparro — Technical Documentation
 
 ## Architecture Overview
 
-Kasparo is a full-stack web application split into two independently deployable services: a Python/FastAPI backend and a Next.js frontend.
+Kasparro is a full-stack web application split into two independently deployable services: a Python/FastAPI backend and a Next.js frontend.
 
 ```
 Browser
@@ -13,7 +13,7 @@ Browser
           │
           ├── Azure OpenAI (cloud)          → gpt-4o  (agent pipeline + streaming)
           ├── Ollama (local/network)        → llama3.2-vision  (visual search)
-          └── Shopify GraphQL API (cloud)   → Admin API (product fetch) + Storefront API (cartCreate)
+          └── Shopify GraphQL API (cloud)   → Admin API (product fetch) + Storefront API (cart/Checkout)
 ```
 
 ---
@@ -55,7 +55,7 @@ Browser
 ## Project Structure
 
 ```
-kasparo/
+kasparro/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py                       # FastAPI app factory
