@@ -22,10 +22,10 @@ An AI-powered personal shopping assistant that helps users discover fashion thro
 ### Real Shopify Integration — Cart and Checkout
 ![Inline cart summary grouped by merchant — 2 stores each with its own checkout](docs/screenshots/1ST-FEATURE/5.jpg)
 ![Live Shopify checkout page — kasparro-curio-indie](docs/screenshots/1ST-FEATURE/6.jpg)
+![Both merchants paid — Indie and Nova checkouts completed](docs/screenshots/1ST-FEATURE/8.jpg)
+![Order confirmed — kasparro-curio-nova](docs/screenshots/1ST-FEATURE/10.jpg)
 ![Live Shopify checkout page — kasparro-curio-nova with 3 items](docs/screenshots/1ST-FEATURE/13.jpg)
 ![Order confirmed — kasparro-curio-indie](docs/screenshots/1ST-FEATURE/14.jpg)
-![Order confirmed — kasparro-curio-nova](docs/screenshots/1ST-FEATURE/10.jpg)
-![Both merchants paid — Indie and Nova checkouts completed](docs/screenshots/1ST-FEATURE/8.jpg)
 
 ### Conversational Chat — Live Agent Reasoning Panel
 ![Full pipeline completed — Intent detected, Search strategy, Catalog searched, Ranked & Filtered](docs/screenshots/2ND-FEATURE/one.jpg)
