@@ -10,6 +10,28 @@ An AI-powered personal shopping assistant that helps users discover fashion thro
 
 ---
 
+## Screenshots
+
+### Home
+![Home — From Intent to Purchase](docs/screenshots/INTRO/1.jpg)
+![Feature Overview](docs/screenshots/INTRO/2.jpg)
+
+### Live Agent Reasoning Panel
+![Agent pipeline starting — Understanding your request](docs/screenshots/1ST-FEATURE/1.jpg)
+![Full pipeline completed — Intent, Search, Catalog, Ranked & Filtered](docs/screenshots/2ND-FEATURE/one.jpg)
+
+### Conversational Shopping and Cart
+![Inline product recommendations with cart add](docs/screenshots/2ND-FEATURE/four.jpg)
+
+### Real Shopify Checkout
+![Live Shopify checkout page generated via cartCreate](docs/screenshots/1ST-FEATURE/6.jpg)
+
+### Visual Search
+![Visual search — image uploaded, matched products with explainable picks](docs/screenshots/3RD-FEATURE/1.jpg)
+![Visual search results with styling rationale per product](docs/screenshots/3RD-FEATURE/3.jpg)
+
+---
+
 ## What We Built
 
 A full-stack AI shopping platform with:
