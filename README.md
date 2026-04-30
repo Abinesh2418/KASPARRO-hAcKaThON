@@ -1,8 +1,14 @@
-# Kasparo — AI Fashion Shopping Agent
+# Curio — AI Fashion Shopping Agent
 
 An AI-powered personal shopping assistant that helps users discover fashion through natural conversation and visual search. Describe your vibe, upload a photo, and the AI finds the right products — learning your taste as you talk.
 
 Built for the **Kasparro Agentic Commerce Hackathon (Track 1)** · April 2026
+
+---
+
+## Demo
+
+[Watch the demo (Google Drive, 5 min)](https://drive.google.com/file/d/1QyGGAnONiTyw-UYIpHnHRgtJyfJ1cTRF/view?usp=sharing)
 
 ---
 
@@ -111,7 +117,6 @@ python run.py
 ```bash
 cd frontend
 npm install
-echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > .env.local
 npm run dev
 # → running on http://localhost:3000
 ```
@@ -146,24 +151,80 @@ ollama serve
 kasparo/
 ├── backend/
 │   ├── app/
-│   │   ├── api/v1/          # chat, products, visual-search, preferences, auth, cart, health
-│   │   ├── services/        # orchestrator, llm, azure, ollama, shopify, cart, product, preference
-│   │   ├── schemas/         # Pydantic models
-│   │   └── core/            # config, middleware, prompts (7 agent prompts incl. tradeoff + checkout)
-│   ├── db/users.json        # File-based user store
+│   │   ├── api/v1/
+│   │   │   ├── chat.py              # POST /api/v1/chat — SSE streaming
+│   │   │   ├── visual_search.py     # POST /api/v1/visual-search
+│   │   │   ├── products.py          # GET  /api/v1/products
+│   │   │   ├── preferences.py       # GET  /api/v1/preferences/{session_id}
+│   │   │   ├── cart.py              # GET/POST/DELETE /api/v1/cart
+│   │   │   ├── auth.py              # POST /api/v1/auth/login
+│   │   │   └── health.py            # GET  /health
+│   │   ├── services/
+│   │   │   ├── orchestrator_service.py  # Agent pipeline coordinator
+│   │   │   ├── llm_service.py           # Azure OpenAI JSON agent + streaming
+│   │   │   ├── azure_service.py         # Fallback streaming chat
+│   │   │   ├── ollama_service.py        # Vision image analysis
+│   │   │   ├── shopify_service.py       # Product fetch + cartCreate
+│   │   │   ├── cart_service.py          # In-memory cart store
+│   │   │   ├── product_service.py       # Mock catalog + Shopify fallback
+│   │   │   └── preference_service.py    # Session + preference extraction
+│   │   ├── schemas/                     # Pydantic models (chat, product, preference)
+│   │   └── core/
+│   │       ├── config.py
+│   │       ├── middleware.py
+│   │       └── prompts/                 # 8 agent prompts
+│   │           ├── intent_agent.py
+│   │           ├── search_agent.py
+│   │           ├── compare_agent.py
+│   │           ├── explain_agent.py
+│   │           ├── tradeoff_agent.py
+│   │           ├── cart_agent.py
+│   │           ├── checkout_agent.py
+│   │           └── orchestrator.py
+│   ├── db/users.json            # File-based user store
+│   ├── requirements.txt
+│   ├── run.py
 │   ├── Dockerfile
 │   └── .env.example
 ├── frontend/
-│   ├── app/                 # Home (/), Login (/login), Curio (/curio), Cart (/cart), Profile (/profile)
-│   ├── components/          # chat/, products/, preferences/, visual-search/, layout/
-│   ├── hooks/               # use-chat.ts, use-cart.ts
-│   ├── services/            # api.ts (fetch + SSE async generator)
-│   ├── types/               # index.ts
+│   ├── app/
+│   │   ├── page.tsx             # Home
+│   │   ├── login/page.tsx
+│   │   ├── curio/page.tsx       # Curio AI chat
+│   │   ├── cart/page.tsx
+│   │   └── profile/page.tsx
+│   ├── components/
+│   │   ├── chat/
+│   │   │   ├── ChatInterface.tsx    # Chat shell + tab switcher
+│   │   │   ├── AgentPanel.tsx       # Live 8-agent reasoning panel
+│   │   │   ├── MessageBubble.tsx    # Message + checkout card + tradeoff matrix
+│   │   │   ├── TradeoffMatrix.tsx   # 7-dimension score table
+│   │   │   ├── ChatInput.tsx        # Text + image upload
+│   │   │   ├── MessageList.tsx
+│   │   │   └── TypingIndicator.tsx
+│   │   ├── layout/
+│   │   │   ├── Sidebar.tsx
+│   │   │   └── ClientLayout.tsx
+│   │   ├── products/
+│   │   │   ├── ProductCard.tsx
+│   │   │   └── InlineProducts.tsx
+│   │   ├── preferences/
+│   │   │   └── PreferencePanel.tsx  # Live style profile panel
+│   │   └── visual-search/
+│   │       └── AttributeTags.tsx
+│   ├── hooks/
+│   │   ├── use-chat.ts          # Chat state machine (useReducer)
+│   │   └── use-cart.ts
+│   ├── services/
+│   │   └── api.ts               # Fetch wrappers + SSE async generator
+│   ├── types/
+│   │   └── index.ts
+│   ├── lib/utils.ts
 │   └── Dockerfile
 ├── docs/
-│   ├── ps.md                # Hackathon problem statement
-│   ├── product.md           # Product features
-│   └── technical.md         # Technical reference
+│   ├── product.md               # Features and value proposition
+│   ├── technical.md             # Architecture, API reference, data models
+│   └── DECISIONS.md             # Key architectural and product decisions
 ├── docker-compose.yml
 └── README.md
 ```
@@ -186,17 +247,17 @@ kasparo/
 | `SHOPIFY_ACCESS_TOKEN` | Yes | Shopify Admin API token (product fetch) |
 | `SHOPIFY_STOREFRONT_TOKEN` | Yes | Shopify Storefront API token (cartCreate / checkout) |
 
-**`frontend/.env.local`**
-
-| Variable | Description |
-|---|---|
-| `NEXT_PUBLIC_API_URL` | Backend base URL (default: `http://localhost:8000`) |
 
 ---
 
-## Team — Duo Dominators
+## Team & Contributions
 
-| Role | Person |
-|---|---|
-| Backend / Full-stack | Abinesh B |
-| Frontend / UI | Ambika S |
+**Duo Dominators**
+
+This was a two-person project built over the hackathon period.
+
+**Abinesh B** — led product thinking and full-stack engineering. Designed the multi-agent pipeline architecture, built the FastAPI backend (orchestrator, all 8 agent prompts, Shopify integration, SSE streaming, cart and checkout logic), defined the SSE event contract between backend and frontend, and implemented the Live Agent Reasoning Panel state machine on the frontend.
+
+**Ambika S** — led frontend and UI. Built the chat interface, product cards, tradeoff matrix component, style profile panel, visual search flow, and the overall visual design across all pages.
+
+Both contributed jointly to the product scope, demo flow, and testing against the live Shopify catalog.
