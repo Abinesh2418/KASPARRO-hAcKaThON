@@ -19,6 +19,17 @@ An AI-powered personal shopping assistant that helps users discover fashion thro
 ### Skincare Routine Builder — Multi-Merchant Store
 ![Routine builder — 4 skincare products recommended across Indie and Nova merchants](docs/screenshots/1ST-FEATURE/2.jpg)
 
+### Live Products from Shopify Stores
+
+**Kasparro-Dev**
+![Kasparro-Dev store products](docs/screenshots/BEFORE-INTRO/2.jpg)
+
+**Kasparro-Curio-Indie**
+![Kasparro-Curio-Indie store products](docs/screenshots/BEFORE-INTRO/4.jpg)
+
+**Kasparro-Curio-Nova**
+![Kasparro-Curio-Nova store products](docs/screenshots/BEFORE-INTRO/6.jpg)
+
 ### Real Shopify Integration — Cart and Checkout
 ![Inline cart summary grouped by merchant — 2 stores each with its own checkout](docs/screenshots/1ST-FEATURE/5.jpg)
 ![Live Shopify checkout page — kasparro-curio-indie](docs/screenshots/1ST-FEATURE/6.jpg)
