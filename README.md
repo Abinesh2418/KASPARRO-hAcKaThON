@@ -16,15 +16,23 @@ An AI-powered personal shopping assistant that helps users discover fashion thro
 ![Home — From Intent to Purchase](docs/screenshots/INTRO/1.jpg)
 ![Feature Overview](docs/screenshots/INTRO/2.jpg)
 
-### Live Agent Reasoning Panel
-![Agent pipeline starting — Understanding your request](docs/screenshots/1ST-FEATURE/1.jpg)
-![Full pipeline completed — Intent, Search, Catalog, Ranked & Filtered](docs/screenshots/2ND-FEATURE/one.jpg)
+### Skincare Routine Builder — Multi-Merchant Store
+![Routine builder — 4 skincare products recommended across Indie and Nova merchants](docs/screenshots/1ST-FEATURE/2.jpg)
 
-### Conversational Shopping and Cart
-![Inline product recommendations with cart add](docs/screenshots/2ND-FEATURE/four.jpg)
+### Real Shopify Integration — Cart and Checkout
+![Inline cart summary grouped by merchant — 2 stores each with its own checkout](docs/screenshots/1ST-FEATURE/5.jpg)
+![Live Shopify checkout page — kasparro-curio-indie](docs/screenshots/1ST-FEATURE/6.jpg)
+![Live Shopify checkout page — kasparro-curio-nova with 3 items](docs/screenshots/1ST-FEATURE/13.jpg)
+![Order confirmed — kasparro-curio-indie](docs/screenshots/1ST-FEATURE/14.jpg)
+![Order confirmed — kasparro-curio-nova](docs/screenshots/1ST-FEATURE/10.jpg)
+![Both merchants paid — Indie and Nova checkouts completed](docs/screenshots/1ST-FEATURE/8.jpg)
 
-### Real Shopify Checkout
-![Live Shopify checkout page generated via cartCreate](docs/screenshots/1ST-FEATURE/6.jpg)
+### Conversational Chat — Live Agent Reasoning Panel
+![Full pipeline completed — Intent detected, Search strategy, Catalog searched, Ranked & Filtered](docs/screenshots/2ND-FEATURE/one.jpg)
+
+### Visual Tradeoff Matrix
+![Score breakdown across 7 dimensions with Best Value and Best Fit panels](docs/screenshots/2ND-FEATURE/two.jpg)
+![Tradeoff matrix with inline product cards and add to cart actions](docs/screenshots/2ND-FEATURE/three.jpg)
 
 ### Visual Search
 ![Visual search — image uploaded, matched products with explainable picks](docs/screenshots/3RD-FEATURE/1.jpg)
