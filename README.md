@@ -2,8 +2,6 @@
 
 An AI-powered personal shopping assistant that helps users discover fashion through natural conversation and visual search. Describe your vibe, upload a photo, and the AI finds the right products — learning your taste as you talk.
 
-Built for the **Kasparro Agentic Commerce Hackathon (Track 1)** · April 2026
-
 ---
 
 ## Demo
@@ -213,8 +211,6 @@ kasparro/
 ## Team & Contributions
 
 **Duo Dominators**
-
-This was a two-person project built over the hackathon period.
 
 **Abinesh B** — led product thinking and full-stack engineering. Designed the multi-agent pipeline architecture, built the FastAPI backend (orchestrator, all 8 agent prompts, Shopify integration, SSE streaming, cart and checkout logic), defined the SSE event contract between backend and frontend, and implemented the Live Agent Reasoning Panel state machine on the frontend.
 
