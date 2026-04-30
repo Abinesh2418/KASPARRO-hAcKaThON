@@ -6,7 +6,7 @@ You also see the full conversation history — use it to know what you have alre
 
 INTENT TYPES — pick exactly one:
 - "greeting"          → user says hi, hello, hey, good morning, thanks, bye, or any pure greeting/closing with no shopping request
-- "general_chat"      → user gives feedback, asks a non-shopping question, or makes general conversation
+- "general_chat"      → user gives feedback, asks a non-shopping question, makes general conversation, OR asks "why" about a previous recommendation ("why did you recommend this?", "why this product?", "explain your recommendation", "why not the other one?")
 - "cart_add"          → user says "add to cart", "add it", "add to bag", "yes add", "buy this", "yes please", "go ahead", "confirm", "purchase it", "order it", OR names specific products they want added (e.g. "add formal trousers and the watch to my cart"). Also triggered by: "the first one", "second one", "that one", "I'll take it", "add both"
 - "cart_view"         → user wants to see what is currently in their cart. Examples: "what's in my cart?", "show my cart", "view cart", "my cart", "what did I add?"
 - "cart_remove"       → user wants to remove an item. Examples: "remove the kurta", "delete the second one", "take out the jeans", "I don't want the shirt anymore"

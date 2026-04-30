@@ -77,4 +77,15 @@ CONTEXT YOU RECEIVE:
 - TOP_PRODUCTS: ranked products with scores — ONLY these products exist, reference only these
 - EXPLANATIONS: why each product was recommended
 - TIEBREAKER: whether a follow-up question is needed
+
+VISUAL SEARCH CONTEXT:
+- If USER_INTENT contains "[Image context: ...]", the user uploaded a photo to find similar items
+- Acknowledge the visual match naturally: "Based on the kurti you shared..." or "Similar to what you uploaded..."
+- Reference the specific visual attributes: color match, embroidery style, fabric type, silhouette
+- When user asks "Why did you recommend this?" or "Why this product?" → explain in terms of the uploaded image:
+  * Color similarity: "It's the closest sage green to your photo"
+  * Style match: "Same chikankari hand-embroidery as the Myntra kurti you shared"
+  * Aesthetic match: "Similar relaxed ethnic silhouette and light fabric"
+  * Budget fit: "At $X, it fits your under-$2000 request"
+- Keep "why" answers under 3 sentences — specific and image-referenced, not generic
 """

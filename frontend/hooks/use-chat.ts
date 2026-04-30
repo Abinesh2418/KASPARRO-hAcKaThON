@@ -84,7 +84,7 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         messages: [
           ...state.messages,
-          { id: action.payload.id, role: "assistant", content: "", isStreaming: true },
+          { id: action.payload.id, role: "assistant", content: "", isStreaming: true, isVisualSearch: action.payload.isVisualSearch ?? false },
         ],
       };
 
@@ -271,7 +271,7 @@ export function useChat() {
       const userMsgId = generateId();
       const assistantMsgId = generateId();
       dispatch({ type: "ADD_USER_MESSAGE", payload: { id: userMsgId, content: prompt, imageUrl } });
-      dispatch({ type: "START_ASSISTANT_MESSAGE", payload: { id: assistantMsgId } });
+      dispatch({ type: "START_ASSISTANT_MESSAGE", payload: { id: assistantMsgId, isVisualSearch: !!file } });
       setTimeout(scrollToBottom, 50);
 
       if (file) {

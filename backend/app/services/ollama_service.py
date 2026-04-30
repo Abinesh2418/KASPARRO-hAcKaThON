@@ -3,26 +3,41 @@ import json
 import httpx
 from app.core.config import settings
 
-VISION_PROMPT = """Look at this image carefully and identify the main product. Respond ONLY with valid JSON matching this exact structure, no other text.
+VISION_PROMPT = """Look at this image carefully and identify the main fashion or lifestyle product. Respond ONLY with valid JSON matching this exact structure, no other text.
 
-IMPORTANT: If you see a watch (wristwatch, timepiece, analog watch, digital watch), set category to "watch" and include "watch" and "analog" in keywords.
+CATEGORY DETECTION RULES (apply in order):
+- If you see a KURTI / KURTA (Indian tunic top, usually knee-length or longer, worn by women, often with embroidery or prints) → category: "kurti"
+- If you see a SAREE or LEHENGA (Indian draped garment or skirt-blouse set) → category: "saree" or "lehenga"
+- If you see a SALWAR / CHURIDAR / PALAZZO (Indian lower garment worn with kurti) → category: "salwar"
+- If you see an ETHNIC DRESS or ANARKALI (long flowy Indian dress) → category: "anarkali"
+- If you see a WRISTWATCH / TIMEPIECE → category: "watch"
+- If you see a WESTERN DRESS (non-Indian style) → category: "dress"
+- If you see a SHIRT / TOP → category: "shirt"
+- If you see JEANS / TROUSERS → category: "jeans"
+- If you see SHOES / FOOTWEAR → category: "shoes"
+- If you see a BAG / HANDBAG → category: "bag"
+
+KEYWORD RULES:
+- For kurti: always include "kurti" + fabric/embroidery type (chikankari, bandhani, block print, embroidered, printed) + neckline if visible (v-neck, round neck, mandarin collar)
+- For watches: always include "watch" + style (analog, digital, smartwatch) + material (steel, leather)
+- Be specific about Indian ethnic wear — mention chikankari, mirror work, phulkari, bandhani, ajrak if visible
 
 {
-  "keywords": ["the 3-5 most specific product search terms — for a watch use: 'watch', 'analog watch', 'silver watch'; for a shirt use: 'shirt', 'formal shirt'; etc."],
-  "style": ["2-3 style words: minimal, classic, casual, formal, sporty, elegant, streetwear"],
-  "colors": ["1-3 main colors visible"],
-  "category": "ONE word: watch OR dress OR shirt OR jeans OR shoes OR jacket OR bag OR jewelry",
-  "occasion": ["1-2 occasions: casual, formal, office, sport, evening"],
-  "description": "one sentence: what is this product exactly"
+  "keywords": ["3-5 most specific product search terms — e.g. for a chikankari kurti: 'kurti', 'chikankari kurti', 'embroidered kurti', 'v-neck kurti'"],
+  "style": ["2-3 style words from: ethnic, bohemian, minimal, classic, casual, formal, festive, romantic, elegant, streetwear"],
+  "colors": ["1-3 main colors visible — be specific: 'sage green', 'dusty rose', 'navy blue'"],
+  "category": "ONE word from: kurti OR saree OR lehenga OR anarkali OR salwar OR watch OR dress OR shirt OR jeans OR shoes OR jacket OR bag OR jewelry",
+  "occasion": ["1-2 occasions: casual, college, office, festive, wedding, party, everyday"],
+  "description": "one sentence: what is this product exactly — mention fabric/embroidery if visible"
 }"""
 
 _MOCK_ATTRIBUTES = {
-    "keywords": [],
-    "style": ["casual", "minimal"],
-    "colors": ["silver"],
-    "category": "accessories",
+    "keywords": ["kurti", "ethnic wear", "embroidered kurti"],
+    "style": ["ethnic", "casual"],
+    "colors": ["multicolor"],
+    "category": "kurti",
     "occasion": ["casual", "everyday"],
-    "description": "A product item.",
+    "description": "An embroidered ethnic kurti.",
 }
 
 

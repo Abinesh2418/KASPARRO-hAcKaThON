@@ -97,6 +97,17 @@ def get_last_products(session_id: str) -> list:
     return _sessions.get(session_id, {}).get("last_products", [])
 
 
+def store_visual_why(session_id: str, why_map: dict) -> None:
+    """Store pre-defined 'why' explanations keyed by product title for visual search."""
+    if session_id in _sessions:
+        _sessions[session_id]["visual_why"] = why_map
+        print(f"[PREFERENCE] Stored visual why-map for {len(why_map)} products")
+
+
+def get_visual_why(session_id: str) -> dict:
+    return _sessions.get(session_id, {}).get("visual_why", {})
+
+
 def _merge_unique(existing: List[str], new: List[str]) -> List[str]:
     combined = existing + [n for n in new if n not in existing]
     return combined[:10]

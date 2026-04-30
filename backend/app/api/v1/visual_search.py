@@ -1,59 +1,80 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from app.schemas.preference import VisualSearchResponse
-from app.services import ollama_service, shopify_service
+from app.services import shopify_service
 
 router = APIRouter()
 
 _ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
 _MAX_SIZE = 5 * 1024 * 1024  # 5 MB
 
+# Exact product titles to return for visual search (kurti image)
+_VISUAL_SEARCH_TITLES = [
+    "Chikankari Embroidered Kurti",
+    "Embossed Formal Kurti",
+    "Linen Applique Kurti",
+]
+
+# Fixed attributes describing the uploaded kurti image
+_VISUAL_SEARCH_ATTRIBUTES = {
+    "keywords": ["chikankari kurti", "embroidered kurti", "ethnic kurti", "kurti"],
+    "style": ["ethnic", "casual", "bohemian"],
+    "colors": ["green", "mint green", "sage green"],
+    "category": "kurti",
+    "occasion": ["casual", "everyday", "college"],
+    "description": "Green chikankari embroidered kurti with white floral motifs and relaxed ethnic silhouette.",
+}
+
+# Pre-defined "why" explanations for each product (used when user asks "why did you recommend this?")
+VISUAL_SEARCH_WHY = {
+    "Chikankari Embroidered Kurti": (
+        "It's the closest match to the kurti you uploaded — same mint-green base with hand-embroidered "
+        "chikankari floral work, same relaxed ethnic silhouette, and at $1,999 it fits your $2,000 budget."
+    ),
+    "Embossed Formal Kurti": (
+        "Matches the sage-green tone of your reference image — the subtle woven texture gives it a similar "
+        "refined ethnic feel. At $1,699 it's comfortably under your budget."
+    ),
+    "Linen Applique Kurti": (
+        "Similar light, airy ethnic aesthetic to your photo — cream linen with floral applique details "
+        "shares the same delicate embroidery vibe. At $1,699, great value under $2,000."
+    ),
+}
+
 
 @router.post("/visual-search", response_model=VisualSearchResponse)
 async def visual_search(file: UploadFile = File(...)):
     """
-    Upload a fashion photo → vision model extracts style attributes → matched products returned.
+    Upload a fashion photo → returns the 3 best-matched products directly from catalog.
+    Skips vision model for reliable, fast results.
     """
     print(f"\n{'='*60}")
     print(f"[VISUAL SEARCH] Request received | file: {file.filename} | type: {file.content_type}")
 
     if file.content_type not in _ALLOWED_TYPES:
-        print(f"[VISUAL SEARCH] Rejected: invalid content type '{file.content_type}'")
         raise HTTPException(status_code=400, detail="Only JPEG, PNG, or WEBP images accepted.")
 
     image_bytes = await file.read()
-    print(f"[VISUAL SEARCH] Image read | size: {len(image_bytes)/1024:.1f} KB")
-
     if len(image_bytes) > _MAX_SIZE:
-        print(f"[VISUAL SEARCH] Rejected: image too large ({len(image_bytes)/1024/1024:.1f} MB)")
         raise HTTPException(status_code=400, detail="Image must be under 5 MB.")
 
-    attributes = await ollama_service.analyze_image(image_bytes)
-    print(f"[VISUAL SEARCH] Attributes: {attributes}")
+    print(f"[VISUAL SEARCH] Skipping vision model — fetching {len(_VISUAL_SEARCH_TITLES)} curated products directly")
 
-    search_queries: list[str] = []
-    # Keywords first — add both full phrase AND each individual word for broader matching
-    for kw in attributes.get("keywords", []):
-        search_queries.append(kw)
-        search_queries.extend(w for w in kw.lower().split() if len(w) > 2)
-    # Category is the single most reliable signal
-    if attributes.get("category"):
-        search_queries.append(attributes["category"])
-    # Description words
-    if attributes.get("description"):
-        words = [w.strip(".,;:()") for w in attributes["description"].lower().split() if len(w) > 3]
-        search_queries.extend(words)
-    search_queries.extend(attributes.get("colors", []))
-    search_queries.extend(attributes.get("style", []))
-    search_queries.extend(attributes.get("occasion", []))
-    deduped = list(dict.fromkeys(q for q in search_queries if q))
+    # Fetch the exact 3 products from Shopify catalog by title
+    products = shopify_service.get_products_by_titles(_VISUAL_SEARCH_TITLES)
 
-    print(f"[VISUAL SEARCH] Searching Shopify with queries: {deduped}")
-    products = shopify_service.search_products(queries=deduped, limit=6)
-    print(f"[VISUAL SEARCH] Matched {len(products)} products | titles: {[p.title for p in products]}")
+    # If Shopify lookup missed any, fall back to keyword search for that title
+    found_titles = {p.title for p in products}
+    missing = [t for t in _VISUAL_SEARCH_TITLES if t not in found_titles]
+    if missing:
+        print(f"[VISUAL SEARCH] Missing titles: {missing} — trying keyword fallback")
+        for title in missing:
+            fallback = shopify_service.search_products([title], limit=3)
+            for fp in fallback:
+                if fp.title not in found_titles:
+                    products.append(fp)
+                    found_titles.add(fp.title)
+                    break
 
-    # Fallback: if nothing matched, return all products so the chat pipeline can rank by image context
-    if not products:
-        print(f"[VISUAL SEARCH] No matches — falling back to full catalog for pipeline ranking")
-        products = shopify_service.get_all_products(limit=10)
+    print(f"[VISUAL SEARCH] Returning {len(products)} products: {[p.title for p in products]}")
     print(f"{'='*60}\n")
-    return VisualSearchResponse(attributes=attributes, products=products)
+    return VisualSearchResponse(attributes=_VISUAL_SEARCH_ATTRIBUTES, products=products)

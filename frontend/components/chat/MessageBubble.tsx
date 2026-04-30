@@ -208,8 +208,8 @@ export function MessageBubble({ message, onSendMessage }: Props) {
             />
           )}
 
-          {/* Tradeoff matrix */}
-          {message.tradeoffData && !message.isStreaming && onSendMessage && (
+          {/* Tradeoff matrix — hidden for visual search results */}
+          {message.tradeoffData && !message.isStreaming && !message.isVisualSearch && onSendMessage && (
             <TradeoffMatrix
               tradeoffData={message.tradeoffData}
               onSendMessage={onSendMessage}

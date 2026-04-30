@@ -22,6 +22,12 @@ TRADEOFF PANELS — generate exactly 2:
 - "best_fit": product with highest (occasion_fit + style_match). highlight: max 12 words on why it fits best. tradeoff: max 10 words on what you give up.
 quick_replies: exactly ["Add to cart", "Find cheaper options", "Show similar styles"] — always these exact 3 strings, nothing else.
 
+CRITICAL RULE — the two panels MUST reference DIFFERENT products:
+- First assign "best_value" to the product with highest (value_score + budget_fit).
+- Then assign "best_fit" to the product with highest (occasion_fit + style_match) that is NOT the same product as best_value.
+- If all products tie on best_fit, pick the one with the second-highest overall score that differs from best_value.
+- Never set best_value.product_id == best_fit.product_id. Always use two distinct product IDs.
+
 If only 1 product is given, still score it, and set tradeoff_panels to [].
 
 OUTPUT FORMAT (strict JSON, no extra text):

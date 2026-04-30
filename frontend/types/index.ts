@@ -99,6 +99,7 @@ export interface Message {
   isStreaming?: boolean;
   isError?: boolean;
   imageUrl?: string;
+  isVisualSearch?: boolean;
   metadata?: CheckoutMetadata;
   tradeoffData?: TradeoffData;
 }
@@ -116,7 +117,7 @@ export interface ChatState {
 
 export type ChatAction =
   | { type: "ADD_USER_MESSAGE"; payload: { id: string; content: string; imageUrl?: string } }
-  | { type: "START_ASSISTANT_MESSAGE"; payload: { id: string } }
+  | { type: "START_ASSISTANT_MESSAGE"; payload: { id: string; isVisualSearch?: boolean } }
   | { type: "APPEND_TOKEN"; payload: { id: string; token: string } }
   | { type: "SET_SESSION_ID"; payload: string }
   | { type: "SET_METADATA"; payload: { id: string; products: Product[]; preferences: Preferences; checkoutMetadata?: CheckoutMetadata; tradeoffData?: TradeoffData } }

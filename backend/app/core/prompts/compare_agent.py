@@ -41,7 +41,31 @@ Score each product across these dimensions:
 
 HARD CONSTRAINTS (instant 0 overall score if violated):
 - Explicit color rejection ("not black", "avoid red")
-- COLOR PREFERENCE HARD FILTER: If intent constraints[] contains a specific color word (e.g. "silver", "gold", "black", "brown", "copper", "rose gold", "white", "blue") → products whose colors[], tags, AND title do NOT contain that color family are EXCLUDED — cap their total at 25/135 regardless of other scores. Color family matching: "silver" matches "silver mesh", "silver dial", "steel"; "gold" matches "gold", "rose gold", "gold-silver"; "black" matches "black", "matte black"; "brown" matches "brown", "tan", "cognac", "leather" (if strap color). If user says "open to all" or gives no color → no color filter.
+- COLOR PREFERENCE HARD FILTER: If intent constraints[] OR the user message contains "[Image context: ... Colors: X ...]" with a specific color → apply strict color filtering using BOTH product metadata AND your knowledge of Indian ethnic wear:
+
+  METADATA CHECK: Check colors[], tags, title, description for the color family.
+  Color families: "green" = green/mint/sage/olive/pista/teal/sage green/mint green/bottle green/emerald; "black" = black/matte black/charcoal; "white" = white/ivory/cream; "red" = red/crimson/maroon/rust; "orange" = orange/saffron/rust/peach; "yellow" = yellow/mustard; "blue" = blue/navy/cobalt/indigo; "pink" = pink/rose/blush.
+
+  KNOWLEDGE-BASED COLOR & VISUAL SIMILARITY (use when metadata is "various" or missing):
+  These rules apply especially for visual search (when intent contains "[Image context:]"):
+
+  GREEN / LIGHT / PASTEL family (score HIGH for green searches):
+  - "Chikankari Embroidered Kurti" → mint green, white chikankari work — ✓ GREEN family
+  - "Embossed Formal Kurti" → sage green, mint — ✓ GREEN family
+  - "Linen Applique Kurti" → cream/white with green+blue floral applique — ✓ LIGHT/GREEN-TONED, acceptable for green searches
+
+  NOT GREEN (score LOW for green searches, cap at 15/100):
+  - "Bandhani Tie-Dye Kurti" → orange, red, multicolor — ✗ NOT green
+  - "Kantha Stitch Kurti" → dark/multicolor bold print — ✗ NOT green
+  - "Embroidered Cotton Kurti" → yellow/mustard — ✗ NOT green
+  - "Mirror Work Festive Kurti" → blue/silver festive — ✗ NOT green
+  - Any kurti with "yellow", "mustard", "orange", "red", "dark" in title/tags → ✗ NOT green
+
+  VISUAL SIMILARITY SCORING (for image-based searches):
+  When intent has "[Image context: ... chikankari ...]" → "Chikankari Embroidered Kurti" gets +15 bonus on style_match
+  When intent has "[Image context: ... embossed / formal / sage ...]" → "Embossed Formal Kurti" gets +10 bonus
+  When intent has "[Image context: ... linen / applique / floral ...]" → "Linen Applique Kurti" gets +10 bonus
+  Kantha/Bandhani/Mirror Work kurtis score 0 on style_match when image shows chikankari/embossed/applique style
 - Wrong size if user specified and product doesn't have it
 - Explicit material rejection
 - Formality mismatch: user said "formal"/"office"/"interview" → casual products capped at 20 total

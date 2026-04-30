@@ -272,7 +272,7 @@ def search_products(queries: list[str], limit: int = 20) -> list[Product]:
                 if any(token in s for s in p.style):
                     hit += 1
                 if any(token in c for c in p.colors):
-                    hit += 1
+                    hit += 4
             if hit > 0:
                 matched_this_query += 1
                 prev = score_map.get(p.id, (0, p))
@@ -293,3 +293,17 @@ def get_product_by_id(product_id: str) -> Product | None:
 
 def get_all_products(limit: int = 20) -> list[Product]:
     return _get_all_products()[:limit]
+
+
+def get_products_by_titles(titles: list[str]) -> list[Product]:
+    """Fetch specific products by exact title match (case-insensitive). Preserves order."""
+    all_products = _get_all_products()
+    title_map = {p.title.lower(): p for p in all_products}
+    result = []
+    for title in titles:
+        p = title_map.get(title.lower())
+        if p:
+            result.append(p)
+        else:
+            print(f"[SHOPIFY] get_products_by_titles: '{title}' not found in catalog")
+    return result

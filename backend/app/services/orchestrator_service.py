@@ -119,6 +119,19 @@ async def _run_tradeoff_agent(ranked_products, intent: dict) -> dict:
     result = await llm_service.call_json_agent(TRADEOFF_AGENT_PROMPT, payload)
     scored = result.get("scored_products", [])
     panels = result.get("tradeoff_panels", [])
+
+    # Safety net: ensure best_value and best_fit point to different products
+    if len(panels) == 2 and panels[0].get("product_id") == panels[1].get("product_id"):
+        all_ids = [p["product_id"] for p in products_summary]
+        used_id = panels[0].get("product_id")
+        alt_id = next((pid for pid in all_ids if pid != used_id), None)
+        if alt_id:
+            alt_product = next((p for p in products_summary if p["product_id"] == alt_id), {})
+            panels[1]["product_id"] = alt_id
+            panels[1]["title"] = alt_product.get("title", alt_id)
+            print(f"[TRADEOFF AGENT] Duplicate panel fix -> best_fit reassigned to {alt_id}")
+        result["tradeoff_panels"] = panels
+
     print(f"[TRADEOFF AGENT] Done -> {len(scored)} scored products, {len(panels)} panels")
     return result
 
@@ -293,6 +306,82 @@ async def _handle_checkout(
     yield {"type": "done"}
 
 
+# ── Color hard-filter ────────────────────────────────────────────────────────
+
+_COLOR_FAMILIES: dict[str, list[str]] = {
+    "black": ["black", "matte black", "midnight black", "jet black", "charcoal"],
+    "white": ["white", "ivory", "cream", "off white", "off-white"],
+    "silver": ["silver", "silver mesh", "steel", "grey", "gray"],
+    "gold": ["gold", "rose gold", "yellow gold", "gold-silver"],
+    "brown": ["brown", "tan", "cognac", "chocolate", "leather", "camel"],
+    "blue": ["blue", "navy", "cobalt", "cobalt navy", "steel blue", "indigo", "teal", "turquoise"],
+    "red": ["red", "crimson", "burgundy", "maroon", "rust"],
+    "green": ["green", "olive", "forest green", "sage", "mint", "sage green", "mint green", "emerald", "teal green", "bottle green", "pista"],
+    "pink": ["pink", "rose", "blush", "dusty pink", "mauve"],
+    "yellow": ["yellow", "mustard", "golden yellow", "lemon"],
+    "orange": ["orange", "rust", "saffron", "peach"],
+    "purple": ["purple", "lavender", "violet", "lilac", "plum"],
+}
+
+
+def _extract_color_constraints(constraints: list[str], preferences: list[str] | None = None, raw_message: str = "") -> list[str]:
+    """Extract explicit color constraints from intent fields AND the raw user message."""
+    known = set(_COLOR_FAMILIES.keys())
+    found = set()
+    # Scan constraints[], preferences[], and the raw message
+    sources = list(constraints) + (preferences or []) + [raw_message]
+    for text in sources:
+        text_low = text.lower()
+        for color in known:
+            if color in text_low:
+                found.add(color)
+    return list(found)
+
+
+def _product_matches_color(product, color: str) -> bool:
+    """
+    Check title, tags, description, and colors[]. For fashion/ethnic wear
+    products often have colors: ["various"] so description is the reliable fallback.
+    """
+    aliases = _COLOR_FAMILIES.get(color, [color])
+    title_low = product.title.lower()
+    desc_low = (product.description or "").lower()
+    for alias in aliases:
+        if alias in title_low:
+            return True
+        if any(alias in tag for tag in product.tags):
+            return True
+        if alias in desc_low:
+            return True
+        # Only trust colors[] when it's not generic "various"
+        if any(alias in pc for pc in product.colors if pc not in ("various", "multicolor", "multi")):
+            return True
+    return False
+
+
+def _apply_color_filter(products, color_constraints: list[str]):
+    if not color_constraints:
+        return products
+    # Strict pass: title/tags match
+    filtered = [p for p in products if all(_product_matches_color(p, c) for c in color_constraints)]
+    if filtered:
+        print(f"[ORCHESTRATOR] Color filter {color_constraints} -> {len(filtered)}/{len(products)} products pass (strict)")
+        return filtered
+    # Loose fallback: include colors[] variants so we always return something
+    def _loose_match(product, color: str) -> bool:
+        aliases = _COLOR_FAMILIES.get(color, [color])
+        return any(
+            any(alias in pc for pc in product.colors)
+            for alias in aliases
+        )
+    fallback = [p for p in products if all(_loose_match(p, c) for c in color_constraints)]
+    if fallback:
+        print(f"[ORCHESTRATOR] Color filter {color_constraints} -> {len(fallback)}/{len(products)} products pass (loose fallback)")
+        return fallback
+    print(f"[ORCHESTRATOR] Color filter {color_constraints} -> no matches, keeping original {len(products)} products")
+    return products
+
+
 # ── Preference merge ─────────────────────────────────────────────────────────
 
 def _merge_intent_into_preferences(intent: dict, existing: dict) -> dict:
@@ -381,6 +470,21 @@ async def run_pipeline(
 
         # ── Non-shopping: greeting or general chat ───────────────────────────
         if intent_type in ("greeting", "general_chat"):
+            # Check if this is a "why did you recommend" question with stored visual why-map
+            _why_keywords = ["why", "reason", "explain", "how come", "what made"]
+            _why_map = preference_service.get_visual_why(session_id)
+            _is_why_question = any(kw in user_message.lower() for kw in _why_keywords)
+            if _is_why_question and _why_map:
+                print(f"[ORCHESTRATOR] Why question detected -> serving pre-defined visual why explanations")
+                lines = []
+                for title, explanation in _why_map.items():
+                    lines.append(f"**{title}**: {explanation}")
+                msg = "Here's why I recommended each:\n\n" + "\n\n".join(lines)
+                for char in msg:
+                    yield {"type": "token", "content": char}
+                yield {"type": "metadata", "preferences": preferences, "products": []}
+                yield {"type": "done"}
+                return
             print(f"[ORCHESTRATOR] Non-shopping intent -> skipping product pipeline")
             async for event in azure_service.stream_chat(messages, preferences):
                 yield event
@@ -518,9 +622,12 @@ async def run_pipeline(
         # ── Step 2 & 3: Search (or use pre-searched from visual search) ─────────
         if pre_searched_products:
             from app.schemas.product import Product
+            from app.api.v1.visual_search import VISUAL_SEARCH_WHY
             print(f"[ORCHESTRATOR] Visual search products provided -> skipping search agents ({len(pre_searched_products)} products)")
             yield _agent_step("search", "skipped")
             raw_products = [Product(**p) for p in pre_searched_products]
+            # Store pre-defined "why" explanations so follow-up "why?" questions work
+            preference_service.store_visual_why(session_id, VISUAL_SEARCH_WHY)
             _vs_counts: dict[str, int] = {}
             for _vp in raw_products:
                 _vm = getattr(_vp, "merchant_name", None) or "Store"
@@ -560,6 +667,13 @@ async def run_pipeline(
             print(f"[ORCHESTRATOR] Step 3/6 -> Shopify Product Search")
             yield _agent_step("fetch", "running")
             raw_products = shopify_service.search_products(queries, limit=10)
+            # Hard-filter by explicit color constraints so non-matching colors never reach compare agent
+            color_constraints = _extract_color_constraints(
+                intent.get("constraints", []),
+                intent.get("preferences", []),
+                user_message,
+            )
+            raw_products = _apply_color_filter(raw_products, color_constraints)
             _merchant_counts: dict[str, int] = {}
             for _p in raw_products:
                 _m = getattr(_p, "merchant_name", None) or "Store"

@@ -195,7 +195,7 @@ export default function Home() {
         <div className="grid grid-cols-3 gap-4 max-w-sm">
           {[
             { value: "8", label: "AI Agents" },
-            { value: "Live", label: "2 Shopify Stores" },
+            { value: "Live", label: "3 Shopify Stores" },
             { value: "∞", label: "Style Combos" },
           ].map(({ value, label }) => (
             <div key={label} className="bg-zinc-900/60 border border-zinc-800/60 rounded-xl px-4 py-3 text-center">
